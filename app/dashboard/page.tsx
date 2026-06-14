@@ -1,7 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import FeedbackButtons from '@/components/FeedbackButtons'
+import FeedbackButtons   from '@/components/FeedbackButtons'
+import PrintButton       from '@/components/PrintButton'
+import SpeechButton      from '@/components/SpeechButton'
+import WordExportButton  from '@/components/WordExportButton'
 
 const TOOLS = [
   { id: 'explain',   icon: '💡', label: 'شرح الدرس',   desc: 'شرح مبسط مع أمثلة' },
@@ -354,14 +357,35 @@ export default function DashboardPage() {
       {/* النتيجة */}
       {output && (
         <div style={{ borderRadius: 16, border: `1.5px solid ${themeColor}33`, padding: 16, background: cardBg }}>
+          {/* أدوات النتيجة: نسخ + طباعة + صوت */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ color: themeColor, fontWeight: 700, fontSize: 13 }}>
               {tool === 'exam' ? '📝' : toolData?.icon} {tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
             </span>
-            <button onClick={() => { navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-              style={{ padding: '4px 10px', borderRadius: 8, border: `1px solid ${copied ? '#68d391' : themeColor + '44'}`, background: copied ? 'rgba(72,187,120,0.2)' : themeColor + '15', color: copied ? '#68d391' : themeColor, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
-              {copied ? '✅ تم' : '📋 نسخ'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {/* نسخ */}
+              <button onClick={() => { navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                style={{ padding: '4px 10px', borderRadius: 8, border: `1px solid ${copied ? '#68d391' : themeColor + '44'}`, background: copied ? 'rgba(72,187,120,0.2)' : themeColor + '15', color: copied ? '#68d391' : themeColor, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
+                {copied ? '✅ تم' : '📋 نسخ'}
+              </button>
+              {/* طباعة */}
+              <PrintButton
+                content={output}
+                title={tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
+                grade={selSubject?.grade}
+                subject={selSubject?.name}
+                themeColor={themeColor}
+              />
+              {/* تصدير Word */}
+              <WordExportButton
+                content={output}
+                title={tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
+                grade={selSubject?.grade}
+                subject={selSubject?.name}
+                tool={tool || ''}
+                themeColor={themeColor}
+              />
+            </div>
           </div>
 
           {/* المحتوى */}
@@ -369,13 +393,20 @@ export default function DashboardPage() {
             {output}
           </div>
 
+          {/* القراءة الصوتية */}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
+            <SpeechButton text={output} themeColor={themeColor} />
+          </div>
+
           {/* أزرار التقييم */}
           {generationId && user && (
-            <FeedbackButtons
-              generationId={generationId}
-              userId={user.id}
-              themeColor={themeColor}
-            />
+            <div style={{ paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
+              <FeedbackButtons
+                generationId={generationId}
+                userId={user.id}
+                themeColor={themeColor}
+              />
+            </div>
           )}
         </div>
       )}
