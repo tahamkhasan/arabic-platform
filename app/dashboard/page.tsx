@@ -73,15 +73,22 @@ export default function DashboardPage() {
 
   async function fetchSubjects(u: any) {
     const params = new URLSearchParams()
-    // تقييد المعلم بمراحله فقط
-    if (u.allowed_stages?.length > 0 && u.user_type === 'teacher') {
-      params.append('stage', u.allowed_stages[0])
+
+    if (u.user_type === 'teacher') {
+      // المعلم يرى مراحله فقط
+      if (u.allowed_stages?.length > 0) {
+        params.append('stages', u.allowed_stages.join(','))
+      }
+    } else if (u.user_type === 'student') {
+      // الطالب يرى مرحلته وصفه فقط
+      if (u.allowed_stages?.length > 0) {
+        params.append('stage', u.allowed_stages[0])
+      }
+      if (u.allowed_grades?.length > 0) {
+        params.append('grade', u.allowed_grades[0])
+      }
     }
-    // تقييد الطالب بمرحلته وصفه
-    if (u.user_type === 'student') {
-      if (u.allowed_stages?.length > 0) params.append('stage', u.allowed_stages[0])
-      if (u.allowed_grades?.length > 0) params.append('grade', u.allowed_grades[0])
-    }
+
     const res = await fetch(`/api/subjects?${params}`)
     const d = await res.json()
     setSubjects(d.subjects || [])

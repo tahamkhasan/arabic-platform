@@ -5,10 +5,7 @@ export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json()
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       return NextResponse.json(
@@ -17,17 +14,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // جلب بيانات المستخدم
+    // جلب كل بيانات المستخدم
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, name, role, subscription, status, user_type')
+      .select('id, email, name, role, subscription, status, user_type, allowed_stages, allowed_grades, theme_color, theme_mode')
       .eq('id', data.user.id)
       .single()
 
-    console.log('userData from DB:', userData)
+    console.log('userData:', userData)
     console.log('userError:', userError)
 
-    // التحقق من حالة المستخدم
+    // التحقق من الحالة
     if (userData?.role !== 'admin') {
       if (!userData || userData?.status === 'pending') {
         return NextResponse.json(
@@ -51,7 +48,12 @@ export async function POST(req: NextRequest) {
         name: userData?.name ?? '',
         subscription: userData?.subscription ?? 'free',
         status: userData?.status ?? 'pending',
+        user_type: userData?.user_type ?? 'teacher',
         userType: userData?.user_type ?? 'teacher',
+        allowed_stages: userData?.allowed_stages ?? [],
+        allowed_grades: userData?.allowed_grades ?? [],
+        theme_color: userData?.theme_color ?? '#f9d423',
+        theme_mode: userData?.theme_mode ?? 'dark',
       },
       session: data.session,
     })
