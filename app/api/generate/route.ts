@@ -125,13 +125,13 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      console.log('[Cache MISS] سيتم إرسال الطلب إلى Groq')
+      console.log('[Cache MISS] سيتم إرسال الطلب إلى Claude')
     }
 
     // ══════════════════════════════════
-    // 2. إرسال الطلب إلى Groq
+    // 2. إرسال الطلب إلى Claude
     // ══════════════════════════════════
-    const systemPrompt = buildSystemPrompt(tool, grade, material || '')
+    const systemPrompt = buildSystemPrompt(tool, grade, material || '', prompt)
     const result       = await generateWithGemini(systemPrompt, prompt)
 
     // ══════════════════════════════════
@@ -160,6 +160,9 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'خطأ غير معروف'
     console.error('[generate] error:', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    )
   }
 }

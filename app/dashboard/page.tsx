@@ -5,13 +5,15 @@ import FeedbackButtons   from '@/components/FeedbackButtons'
 import PrintButton       from '@/components/PrintButton'
 import SpeechButton      from '@/components/SpeechButton'
 import WordExportButton  from '@/components/WordExportButton'
+import PptxButton        from '@/components/PptxButton'
 
 const TOOLS = [
-  { id: 'explain',   icon: '💡', label: 'شرح الدرس',   desc: 'شرح مبسط مع أمثلة' },
-  { id: 'worksheet', icon: '📋', label: 'ورقة عمل',    desc: 'أنشطة تفاعلية' },
-  { id: 'game',      icon: '🎮', label: 'لعبة لغوية',  desc: 'نشاط ممتع وتعليمي' },
-  { id: 'plan',      icon: '📖', label: 'تحضير الدرس', desc: 'خطة درس كاملة' },
-  { id: 'exam',      icon: '📝', label: 'اختبار',       desc: 'أسئلة متنوعة' },
+  { id: 'explain',   icon: '💡', label: 'شرح الدرس',      desc: 'شرح مبسط مع أمثلة' },
+  { id: 'worksheet', icon: '📋', label: 'ورقة عمل',       desc: 'أنشطة تفاعلية' },
+  { id: 'game',      icon: '🎮', label: 'لعبة لغوية',     desc: 'نشاط ممتع وتعليمي' },
+  { id: 'plan',      icon: '📖', label: 'تحضير الدرس',    desc: 'خطة درس كاملة' },
+  { id: 'pptx',      icon: '📊', label: 'عرض PowerPoint', desc: 'شرائح جاهزة للعرض' },
+  { id: 'exam',      icon: '📝', label: 'اختبار',          desc: 'أسئلة متنوعة' },
 ]
 
 const THEME_COLORS = [
@@ -385,6 +387,16 @@ export default function DashboardPage() {
                 tool={tool || ''}
                 themeColor={themeColor}
               />
+              {/* تصدير PowerPoint — للشرح والتحضير فقط */}
+              {(tool === 'explain' || tool === 'plan' || tool === 'pptx') && (
+                <PptxButton
+                  content={output}
+                  title={`${toolData?.label} — ${selLesson?.name}`}
+                  grade={selSubject?.grade}
+                  subject={selSubject?.name}
+                  themeColor={themeColor}
+                />
+              )}
             </div>
           </div>
 
