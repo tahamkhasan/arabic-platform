@@ -1,12 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-
-const STAGES = [
-  { id: 'primary', label: 'ابتدائي', grades: ['الأول','الثاني','الثالث','الرابع','الخامس'] },
-  { id: 'middle',  label: 'متوسط',   grades: ['السادس','السابع','الثامن','التاسع'] },
-  { id: 'high',    label: 'ثانوي',   grades: ['العاشر','الحادي عشر','الثاني عشر'] },
-]
+import { ar, STAGES } from '@/lib/constants/ar'
 
 const ICONS = ['📚','📖','✏️','🔤','📝','🎯','💡','🌟','📜','🎨','🔬','🧮']
 
@@ -31,7 +26,7 @@ export default function AdminPage() {
   const [sName, setSName]   = useState('')
   const [sDesc, setSDesc]   = useState('')
   const [sStage, setSStage] = useState('middle')
-  const [sGrade, setSGrade] = useState('السادس')
+  const [sGrade, setSGrade] = useState(ar.common.grades.middle[0])
   const [sIcon, setSIcon]   = useState('📚')
   const [editSubject, setEditSubject] = useState<any>(null)
 
@@ -122,14 +117,14 @@ export default function AdminPage() {
 
   // ── المواد ──
   async function saveSubject() {
-    if (!sName) return showMsg('⚠️ أدخل اسم المادة')
+    if (!sName) return showMsg(ar.admin.messages.enterSubjectName)
     setSaving(true)
     const body = { name: sName, description: sDesc, stage: sStage, grade: sGrade, icon: sIcon, adminId: user.id }
     const res = editSubject
       ? await fetch('/api/subjects', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, id: editSubject.id }) })
       : await fetch('/api/subjects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (res.ok) {
-      showMsg(editSubject ? '✅ تم تعديل المادة' : '✅ تم إضافة المادة')
+      showMsg(editSubject ? ar.admin.messages.subjectUpdated : ar.admin.messages.subjectAdded)
       setSName(''); setSDesc(''); setEditSubject(null)
       fetchSubjects()
     }
@@ -137,22 +132,22 @@ export default function AdminPage() {
   }
 
   async function deleteSubject(id: string) {
-    if (!confirm('حذف المادة وكل وحداتها ودروسها؟')) return
+    if (!confirm(ar.admin.confirms.deleteSubject)) return
     await fetch('/api/subjects', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, adminId: user.id }) })
     fetchSubjects(); setSelSubject(null); setUnits([]); setLessons([])
   }
 
   // ── الوحدات ──
   async function saveUnit() {
-    if (!selSubject) return showMsg('⚠️ اختر مادة أولاً')
-    if (!uName) return showMsg('⚠️ أدخل اسم الوحدة')
+    if (!selSubject) return showMsg(ar.admin.messages.selectSubjectFirst)
+    if (!uName) return showMsg(ar.admin.messages.enterUnitName)
     setSaving(true)
     const body = { subject_id: selSubject.id, name: uName, description: uDesc, icon: uIcon, order_num: uOrder, adminId: user.id }
     const res = editUnit
       ? await fetch('/api/units', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, id: editUnit.id }) })
       : await fetch('/api/units', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     if (res.ok) {
-      showMsg(editUnit ? '✅ تم تعديل الوحدة' : '✅ تم إضافة الوحدة')
+      showMsg(editUnit ? ar.admin.messages.unitUpdated : ar.admin.messages.unitAdded)
       setUName(''); setUDesc(''); setEditUnit(null)
       fetchUnits(selSubject.id)
     }
@@ -160,15 +155,15 @@ export default function AdminPage() {
   }
 
   async function deleteUnit(id: string) {
-    if (!confirm('حذف الوحدة وكل دروسها؟')) return
+    if (!confirm(ar.admin.confirms.deleteUnit)) return
     await fetch('/api/units', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, adminId: user.id }) })
     fetchUnits(selSubject.id); setSelUnit(null); setLessons([])
   }
 
   // ── الدروس ──
   async function saveLesson() {
-    if (!selUnit) return showMsg('⚠️ اختر وحدة أولاً')
-    if (!lName) return showMsg('⚠️ أدخل اسم الدرس')
+    if (!selUnit) return showMsg(ar.admin.messages.selectUnitFirst)
+    if (!lName) return showMsg(ar.admin.messages.enterLessonName)
     setSaving(true)
     const formData = new FormData()
     formData.append('unit_id', selUnit.id)
@@ -185,7 +180,7 @@ export default function AdminPage() {
       : await fetch('/api/lessons', { method: 'POST', body: formData })
 
     if (res.ok) {
-      showMsg(editLesson ? '✅ تم تعديل الدرس' : '✅ تم إضافة الدرس')
+      showMsg(editLesson ? ar.admin.messages.lessonUpdated : ar.admin.messages.lessonAdded)
       setLName(''); setLDesc(''); setLContent(''); setLFiles([]); setEditLesson(null)
       fetchLessons(selUnit.id)
     }
@@ -193,16 +188,16 @@ export default function AdminPage() {
   }
 
   async function deleteLesson(id: string) {
-    if (!confirm('حذف هذا الدرس؟')) return
+    if (!confirm(ar.admin.confirms.deleteLesson)) return
     await fetch('/api/lessons', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, adminId: user.id }) })
     fetchLessons(selUnit.id)
   }
 
   // ── الاختبارات ──
   async function saveExam() {
-    if (!eName) return showMsg('⚠️ أدخل اسم الاختبار')
-    if (!selSubject) return showMsg('⚠️ اختر مادة للاختبار')
-    if (eType === 'short' && eLessonIds.length === 0) return showMsg('⚠️ اختر دروساً للاختبار القصير')
+    if (!eName) return showMsg(ar.admin.messages.enterExamName)
+    if (!selSubject) return showMsg(ar.admin.messages.selectSubjectForExam)
+    if (eType === 'short' && eLessonIds.length === 0) return showMsg(ar.admin.messages.selectLessonsForShortExam)
     setSaving(true)
     const res = await fetch('/api/exams', {
       method: 'POST',
@@ -214,7 +209,7 @@ export default function AdminPage() {
       }),
     })
     if (res.ok) {
-      showMsg('✅ تم إضافة الاختبار')
+      showMsg(ar.admin.messages.examAdded)
       setEName(''); setEDesc(''); setELessonIds([]); fetchExams()
     }
     setSaving(false)
@@ -235,14 +230,14 @@ export default function AdminPage() {
   }
 
   const currentStage = STAGES.find(s => s.id === sStage)
-  const stageNames: Record<string,string> = { primary:'ابتدائي', middle:'متوسط', high:'ثانوي' }
+  const stageNames = ar.common.stages
 
   const tabs = [
-    { id: 'requests', label: `🔔 الطلبات${requests.length > 0 ? ` (${requests.length})` : ''}` },
-    { id: 'subjects', label: '📚 المواد' },
-    { id: 'units',    label: '📖 الوحدات' },
-    { id: 'lessons',  label: '✏️ الدروس' },
-    { id: 'exams',    label: '📝 الاختبارات' },
+    { id: 'requests', label: `${ar.admin.tabs.requests}${requests.length > 0 ? ` (${requests.length})` : ''}` },
+    { id: 'subjects', label: ar.admin.tabs.subjects },
+    { id: 'units',    label: ar.admin.tabs.units },
+    { id: 'lessons',  label: ar.admin.tabs.lessons },
+    { id: 'exams',    label: ar.admin.tabs.exams },
   ]
 
   return (
@@ -253,21 +248,21 @@ export default function AdminPage() {
       <div className="flex justify-between items-center mb-5 p-4 rounded-2xl border border-white/8"
         style={{ background: 'rgba(255,255,255,0.04)' }}>
         <div>
-          <h1 className="text-lg font-black text-yellow-400">⚙️ لوحة تحكم المدير</h1>
-          <p className="text-xs text-gray-600">منصة مساعد اللغة العربية</p>
+          <h1 className="text-lg font-black text-yellow-400">{ar.admin.title}</h1>
+          <p className="text-xs text-gray-600">{ar.common.platformName}</p>
         </div>
         <button onClick={handleLogout}
           className="px-3 py-2 rounded-xl text-red-400 text-xs font-bold border border-red-400/30"
-          style={{ background: 'rgba(252,129,129,0.08)' }}>خروج</button>
+          style={{ background: 'rgba(252,129,129,0.08)' }}>{ar.common.exit}</button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-2 mb-5">
         {[
-          { label: 'المواد',      value: subjects.length,  icon: '📚', color: '#f9d423' },
-          { label: 'التوليدات',   value: stats.generations, icon: '✨', color: '#4facfe' },
-          { label: 'المستخدمون', value: stats.users,       icon: '👨‍🏫', color: '#43e97b' },
-          { label: 'طلبات',       value: requests.length,  icon: '🔔', color: '#ff4e50' },
+          { label: ar.admin.stats.subjects,  value: subjects.length,  icon: '📚', color: '#f9d423' },
+          { label: ar.admin.stats.generations, value: stats.generations, icon: '✨', color: '#4facfe' },
+          { label: ar.admin.stats.users, value: stats.users,       icon: '👨‍🏫', color: '#43e97b' },
+          { label: ar.admin.stats.requests, value: requests.length,  icon: '🔔', color: '#ff4e50' },
         ].map(s => (
           <div key={s.label} className="rounded-xl p-3 text-center border"
             style={{ background: 'rgba(255,255,255,0.04)', borderColor: s.color + '22' }}>
@@ -301,7 +296,7 @@ export default function AdminPage() {
       {tab === 'requests' && (
         <div className="space-y-3">
           {requests.length === 0
-            ? <div className="text-center py-12"><div className="text-4xl mb-3">✅</div><p className="text-gray-500 text-sm">لا توجد طلبات معلقة</p></div>
+            ? <div className="text-center py-12"><div className="text-4xl mb-3">✅</div><p className="text-gray-500 text-sm">{ar.admin.requestsTab.empty}</p></div>
             : requests.map(r => {
               const stageColors: Record<string,string> = { primary:'#43e97b', middle:'#4facfe', high:'#f9d423' }
               return (
@@ -312,7 +307,7 @@ export default function AdminPage() {
                         <span>{r.user_type === 'teacher' ? '👨‍🏫' : '👨‍🎓'}</span>
                         <p className="font-bold text-sm">{r.name}</p>
                         <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: r.user_type === 'teacher' ? 'rgba(79,172,254,0.15)' : 'rgba(67,233,123,0.15)', color: r.user_type === 'teacher' ? '#4facfe' : '#43e97b' }}>
-                          {r.user_type === 'teacher' ? 'معلم' : 'طالب'}
+                          {r.user_type === 'teacher' ? ar.common.userType.teacher : ar.common.userType.student}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500">{r.email}</p>
@@ -322,7 +317,7 @@ export default function AdminPage() {
                   <div className="mb-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     {r.allowed_stages?.length > 0 && (
                       <div className="mb-2">
-                        <p className="text-xs text-gray-500 font-bold mb-1">📚 المراحل:</p>
+                        <p className="text-xs text-gray-500 font-bold mb-1">{ar.admin.requestsTab.stages}</p>
                         <div className="flex flex-wrap gap-1">
                           {r.allowed_stages.map((s: string) => (
                             <span key={s} className="text-xs px-2 py-1 rounded-lg font-bold"
@@ -335,16 +330,16 @@ export default function AdminPage() {
                     )}
                     {r.user_type === 'student' && r.allowed_grades?.length > 0 && (
                       <div>
-                        <p className="text-xs text-gray-500 font-bold mb-1">🎓 الصف:</p>
+                        <p className="text-xs text-gray-500 font-bold mb-1">{ar.admin.requestsTab.grade}</p>
                         <span className="text-xs px-2 py-1 rounded-lg font-bold" style={{ background: 'rgba(249,212,35,0.12)', color: '#f9d423', border: '1px solid rgba(249,212,35,0.3)' }}>
-                          الصف {r.allowed_grades[0]}
+                          {ar.common.gradePrefix} {r.allowed_grades[0]}
                         </span>
                       </div>
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => handleApprove(r.id)} className="flex-1 py-2 rounded-xl font-bold text-sm" style={{ background: 'linear-gradient(135deg,#43e97b,#38f9d7)', color: '#1a1a2e' }}>✅ موافقة</button>
-                    <button onClick={() => handleReject(r.id)} className="flex-1 py-2 rounded-xl font-bold text-sm border border-red-400/30" style={{ background: 'rgba(252,129,129,0.08)', color: '#fc8181' }}>❌ رفض</button>
+                    <button onClick={() => handleApprove(r.id)} className="flex-1 py-2 rounded-xl font-bold text-sm" style={{ background: 'linear-gradient(135deg,#43e97b,#38f9d7)', color: '#1a1a2e' }}>{ar.admin.requestsTab.approve}</button>
+                    <button onClick={() => handleReject(r.id)} className="flex-1 py-2 rounded-xl font-bold text-sm border border-red-400/30" style={{ background: 'rgba(252,129,129,0.08)', color: '#fc8181' }}>{ar.admin.requestsTab.reject}</button>
                   </div>
                 </div>
               )
@@ -357,16 +352,16 @@ export default function AdminPage() {
       {tab === 'subjects' && (
         <div className="space-y-4">
           <div className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <p className="text-xs text-yellow-400 font-black mb-3">{editSubject ? '✏️ تعديل المادة' : '➕ إضافة مادة جديدة'}</p>
+            <p className="text-xs text-yellow-400 font-black mb-3">{editSubject ? ar.admin.subjects.edit : ar.admin.subjects.add}</p>
             <div className="space-y-3">
-              <input value={sName} onChange={e => setSName(e.target.value)} placeholder="اسم المادة — مثال: اللغة العربية"
+              <input value={sName} onChange={e => setSName(e.target.value)} placeholder={ar.admin.subjects.namePlaceholder}
                 className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                 style={{ background: 'rgba(255,255,255,0.06)' }} />
-              <input value={sDesc} onChange={e => setSDesc(e.target.value)} placeholder="وصف المادة (اختياري)"
+              <input value={sDesc} onChange={e => setSDesc(e.target.value)} placeholder={ar.admin.subjects.descPlaceholder}
                 className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                 style={{ background: 'rgba(255,255,255,0.06)' }} />
               <div>
-                <p className="text-xs text-gray-500 mb-2 font-bold">المرحلة</p>
+                <p className="text-xs text-gray-500 mb-2 font-bold">{ar.admin.subjects.stage}</p>
                 <div className="flex gap-2">
                   {STAGES.map(s => (
                     <button key={s.id} onClick={() => { setSStage(s.id); setSGrade(s.grades[0]) }}
@@ -378,19 +373,19 @@ export default function AdminPage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-2 font-bold">الصف</p>
+                <p className="text-xs text-gray-500 mb-2 font-bold">{ar.admin.subjects.grade}</p>
                 <div className="flex flex-wrap gap-2">
                   {currentStage?.grades.map(g => (
                     <button key={g} onClick={() => setSGrade(g)}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                       style={{ background: sGrade === g ? 'linear-gradient(135deg,#f9d423,#ff4e50)' : 'rgba(255,255,255,0.06)', color: sGrade === g ? '#1a1a2e' : '#a0aec0' }}>
-                      الصف {g}
+                      {ar.common.gradePrefix} {g}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-2 font-bold">الأيقونة</p>
+                <p className="text-xs text-gray-500 mb-2 font-bold">{ar.admin.subjects.icon}</p>
                 <div className="flex flex-wrap gap-2">
                   {ICONS.map(ic => (
                     <button key={ic} onClick={() => setSIcon(ic)}
@@ -405,12 +400,12 @@ export default function AdminPage() {
                 <button onClick={saveSubject} disabled={saving}
                   className="flex-1 py-3 rounded-xl font-black text-sm transition-all"
                   style={{ background: saving ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#f9d423,#ff4e50)', color: saving ? '#4a5568' : '#1a1a2e' }}>
-                  {saving ? '⏳...' : editSubject ? '💾 حفظ التعديل' : '➕ إضافة المادة'}
+                  {saving ? ar.common.savingShort : editSubject ? ar.admin.subjects.saveEdit : ar.admin.subjects.addButton}
                 </button>
                 {editSubject && (
                   <button onClick={() => { setEditSubject(null); setSName(''); setSDesc('') }}
                     className="px-4 py-3 rounded-xl font-bold text-sm border border-white/10 text-gray-400">
-                    إلغاء
+                    {ar.common.cancel}
                   </button>
                 )}
               </div>
@@ -419,7 +414,7 @@ export default function AdminPage() {
 
           {/* قائمة المواد */}
           <div className="space-y-2">
-            <p className="text-xs text-gray-500 font-bold">📚 المواد المضافة ({subjects.length})</p>
+            <p className="text-xs text-gray-500 font-bold">{ar.admin.subjects.list(subjects.length)}</p>
             {subjects.map(s => (
               <div key={s.id} className="p-3 rounded-xl border border-white/8 flex items-center justify-between"
                 style={{ background: selSubject?.id === s.id ? 'rgba(249,212,35,0.08)' : 'rgba(255,255,255,0.04)', borderColor: selSubject?.id === s.id ? 'rgba(249,212,35,0.3)' : 'rgba(255,255,255,0.08)' }}>
@@ -428,7 +423,7 @@ export default function AdminPage() {
                   <span className="text-2xl">{s.icon}</span>
                   <div>
                     <p className="font-bold text-sm text-yellow-400">{s.name}</p>
-                    <p className="text-xs text-gray-500">{stageNames[s.stage]} — الصف {s.grade}</p>
+                    <p className="text-xs text-gray-500">{ar.admin.subjects.stageGrade(stageNames[s.stage], s.grade)}</p>
                   </div>
                 </button>
                 <div className="flex gap-2">
@@ -448,7 +443,7 @@ export default function AdminPage() {
         <div className="space-y-4">
           {/* اختيار المادة */}
           <div>
-            <p className="text-xs text-gray-500 font-bold mb-2">📚 المادة</p>
+            <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.units.subject}</p>
             <div className="flex flex-wrap gap-2">
               {subjects.map(s => (
                 <button key={s.id} onClick={() => { setSelSubject(s); fetchUnits(s.id) }}
@@ -462,23 +457,23 @@ export default function AdminPage() {
 
           {selSubject && (
             <div className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <p className="text-xs text-yellow-400 font-black mb-3">{editUnit ? '✏️ تعديل الوحدة' : `➕ إضافة وحدة في ${selSubject.name}`}</p>
+              <p className="text-xs text-yellow-400 font-black mb-3">{editUnit ? ar.admin.units.edit : ar.admin.units.add(selSubject.name)}</p>
               <div className="space-y-3">
-                <input value={uName} onChange={e => setUName(e.target.value)} placeholder="اسم الوحدة — مثال: نصوص وقراءة"
+                <input value={uName} onChange={e => setUName(e.target.value)} placeholder={ar.admin.units.namePlaceholder}
                   className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                   style={{ background: 'rgba(255,255,255,0.06)' }} />
-                <input value={uDesc} onChange={e => setUDesc(e.target.value)} placeholder="وصف الوحدة (اختياري)"
+                <input value={uDesc} onChange={e => setUDesc(e.target.value)} placeholder={ar.admin.units.descPlaceholder}
                   className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                   style={{ background: 'rgba(255,255,255,0.06)' }} />
                 <div className="flex gap-3 items-center">
                   <div className="flex-1">
-                    <p className="text-xs text-gray-500 mb-1 font-bold">الترتيب</p>
+                    <p className="text-xs text-gray-500 mb-1 font-bold">{ar.admin.units.order}</p>
                     <input type="number" value={uOrder} onChange={e => setUOrder(parseInt(e.target.value))} min={1}
                       className="w-full px-4 py-3 rounded-xl text-white outline-none border border-white/10"
                       style={{ background: 'rgba(255,255,255,0.06)' }} />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1 font-bold">الأيقونة</p>
+                    <p className="text-xs text-gray-500 mb-1 font-bold">{ar.admin.units.icon}</p>
                     <div className="flex flex-wrap gap-1">
                       {ICONS.slice(0,6).map(ic => (
                         <button key={ic} onClick={() => setUIcon(ic)}
@@ -494,11 +489,11 @@ export default function AdminPage() {
                   <button onClick={saveUnit} disabled={saving}
                     className="flex-1 py-3 rounded-xl font-black text-sm transition-all"
                     style={{ background: saving ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#f9d423,#ff4e50)', color: saving ? '#4a5568' : '#1a1a2e' }}>
-                    {saving ? '⏳...' : editUnit ? '💾 حفظ التعديل' : '➕ إضافة الوحدة'}
+                    {saving ? ar.common.savingShort : editUnit ? ar.admin.units.saveEdit : ar.admin.units.addButton}
                   </button>
                   {editUnit && (
                     <button onClick={() => { setEditUnit(null); setUName(''); setUDesc('') }}
-                      className="px-4 py-3 rounded-xl font-bold text-sm border border-white/10 text-gray-400">إلغاء</button>
+                      className="px-4 py-3 rounded-xl font-bold text-sm border border-white/10 text-gray-400">{ar.common.cancel}</button>
                   )}
                 </div>
               </div>
@@ -507,7 +502,7 @@ export default function AdminPage() {
 
           {/* قائمة الوحدات */}
           <div className="space-y-2">
-            <p className="text-xs text-gray-500 font-bold">📖 الوحدات ({units.length})</p>
+            <p className="text-xs text-gray-500 font-bold">{ar.admin.units.list(units.length)}</p>
             {units.map(u => (
               <div key={u.id} className="p-3 rounded-xl border border-white/8 flex items-center justify-between"
                 style={{ background: selUnit?.id === u.id ? 'rgba(79,172,254,0.08)' : 'rgba(255,255,255,0.04)', borderColor: selUnit?.id === u.id ? 'rgba(79,172,254,0.3)' : 'rgba(255,255,255,0.08)' }}>
@@ -516,7 +511,7 @@ export default function AdminPage() {
                   <span className="text-xl">{u.icon}</span>
                   <div>
                     <p className="font-bold text-sm text-blue-400">{u.name}</p>
-                    <p className="text-xs text-gray-500">الترتيب: {u.order_num}</p>
+                    <p className="text-xs text-gray-500">{ar.common.orderLabel(u.order_num)}</p>
                   </div>
                 </button>
                 <div className="flex gap-2">
@@ -537,7 +532,7 @@ export default function AdminPage() {
           {/* اختيار المادة والوحدة */}
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-gray-500 font-bold mb-2">📚 المادة</p>
+              <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.units.subject}</p>
               <div className="flex flex-wrap gap-2">
                 {subjects.map(s => (
                   <button key={s.id} onClick={() => { setSelSubject(s); fetchUnits(s.id); setSelUnit(null); setLessons([]) }}
@@ -550,7 +545,7 @@ export default function AdminPage() {
             </div>
             {selSubject && units.length > 0 && (
               <div>
-                <p className="text-xs text-gray-500 font-bold mb-2">📖 الوحدة</p>
+                <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.lessons.unit}</p>
                 <div className="flex flex-wrap gap-2">
                   {units.map(u => (
                     <button key={u.id} onClick={() => { setSelUnit(u); fetchLessons(u.id) }}
@@ -566,22 +561,22 @@ export default function AdminPage() {
 
           {selUnit && (
             <div className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <p className="text-xs text-yellow-400 font-black mb-3">{editLesson ? '✏️ تعديل الدرس' : `➕ إضافة درس في ${selUnit.name}`}</p>
+              <p className="text-xs text-yellow-400 font-black mb-3">{editLesson ? ar.admin.lessons.edit : ar.admin.lessons.add(selUnit.name)}</p>
               <div className="space-y-3">
-                <input value={lName} onChange={e => setLName(e.target.value)} placeholder="اسم الدرس — مثال: المبتدأ والخبر"
+                <input value={lName} onChange={e => setLName(e.target.value)} placeholder={ar.admin.lessons.namePlaceholder}
                   className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                   style={{ background: 'rgba(255,255,255,0.06)' }} />
-                <input value={lDesc} onChange={e => setLDesc(e.target.value)} placeholder="وصف الدرس (اختياري)"
+                <input value={lDesc} onChange={e => setLDesc(e.target.value)} placeholder={ar.admin.lessons.descPlaceholder}
                   className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                   style={{ background: 'rgba(255,255,255,0.06)' }} />
                 <textarea value={lContent} onChange={e => setLContent(e.target.value)}
-                  placeholder="المادة العلمية للدرس — القواعد والأمثلة والشواهد..."
+                  placeholder={ar.admin.lessons.contentPlaceholder}
                   rows={5}
                   className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10 resize-y"
                   style={{ background: 'rgba(255,255,255,0.06)', fontFamily: 'inherit', lineHeight: '2' }} />
                 <div className="flex gap-3 items-center">
                   <div className="w-24">
-                    <p className="text-xs text-gray-500 mb-1 font-bold">الترتيب</p>
+                    <p className="text-xs text-gray-500 mb-1 font-bold">{ar.admin.units.order}</p>
                     <input type="number" value={lOrder} onChange={e => setLOrder(parseInt(e.target.value))} min={1}
                       className="w-full px-3 py-2 rounded-xl text-white outline-none border border-white/10"
                       style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -589,14 +584,14 @@ export default function AdminPage() {
                 </div>
                 {!editLesson && (
                   <div>
-                    <p className="text-xs text-gray-500 font-bold mb-2">📎 ملفات الدرس (اختياري)</p>
+                    <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.lessons.files}</p>
                     <div onClick={() => fileRef.current?.click()}
                       onDrop={e => { e.preventDefault(); setLFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]) }}
                       onDragOver={e => e.preventDefault()}
                       className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer"
                       style={{ borderColor: 'rgba(249,212,35,0.3)', background: 'rgba(249,212,35,0.03)' }}>
-                      <p className="text-yellow-400 font-bold text-sm">📂 اسحب أو انقر للرفع</p>
-                      <p className="text-gray-600 text-xs mt-1">Word • PDF • صور</p>
+                      <p className="text-yellow-400 font-bold text-sm">{ar.admin.lessons.upload}</p>
+                      <p className="text-gray-600 text-xs mt-1">{ar.admin.lessons.uploadHint}</p>
                       <input ref={fileRef} type="file" multiple accept=".docx,.pdf,.png,.jpg,.jpeg,.webp,.txt" onChange={e => setLFiles(prev => [...prev, ...Array.from(e.target.files!)])} className="hidden" />
                     </div>
                     {lFiles.length > 0 && (
@@ -615,11 +610,11 @@ export default function AdminPage() {
                   <button onClick={saveLesson} disabled={saving}
                     className="flex-1 py-3 rounded-xl font-black text-sm transition-all"
                     style={{ background: saving ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#f9d423,#ff4e50)', color: saving ? '#4a5568' : '#1a1a2e' }}>
-                    {saving ? '⏳...' : editLesson ? '💾 حفظ التعديل' : '➕ إضافة الدرس'}
+                    {saving ? ar.common.savingShort : editLesson ? ar.admin.lessons.saveEdit : ar.admin.lessons.addButton}
                   </button>
                   {editLesson && (
                     <button onClick={() => { setEditLesson(null); setLName(''); setLDesc(''); setLContent('') }}
-                      className="px-4 py-3 rounded-xl font-bold text-sm border border-white/10 text-gray-400">إلغاء</button>
+                      className="px-4 py-3 rounded-xl font-bold text-sm border border-white/10 text-gray-400">{ar.common.cancel}</button>
                   )}
                 </div>
               </div>
@@ -628,7 +623,7 @@ export default function AdminPage() {
 
           {/* قائمة الدروس */}
           <div className="space-y-2">
-            <p className="text-xs text-gray-500 font-bold">✏️ الدروس ({lessons.length})</p>
+            <p className="text-xs text-gray-500 font-bold">{ar.admin.lessons.list(lessons.length)}</p>
             {lessons.map(l => (
               <div key={l.id} className="p-3 rounded-xl border border-white/8"
                 style={{ background: 'rgba(255,255,255,0.04)' }}>
@@ -636,7 +631,7 @@ export default function AdminPage() {
                   <div>
                     <p className="font-bold text-sm text-green-400">{l.order_num}. {l.name}</p>
                     {l.description && <p className="text-xs text-gray-500 mt-0.5">{l.description}</p>}
-                    {l.file_urls?.length > 0 && <p className="text-xs text-blue-400 mt-0.5">📎 {l.file_urls.length} ملف</p>}
+                    {l.file_urls?.length > 0 && <p className="text-xs text-blue-400 mt-0.5">📎 {ar.common.fileCount(l.file_urls.length)}</p>}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setEditLesson(l); setLName(l.name); setLDesc(l.description || ''); setLContent(l.content || ''); setLOrder(l.order_num) }}
@@ -655,17 +650,17 @@ export default function AdminPage() {
       {tab === 'exams' && (
         <div className="space-y-4">
           <div className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <p className="text-xs text-yellow-400 font-black mb-3">➕ إضافة اختبار جديد</p>
+            <p className="text-xs text-yellow-400 font-black mb-3">{ar.admin.exams.add}</p>
             <div className="space-y-3">
-              <input value={eName} onChange={e => setEName(e.target.value)} placeholder="اسم الاختبار"
+              <input value={eName} onChange={e => setEName(e.target.value)} placeholder={ar.admin.exams.namePlaceholder}
                 className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10"
                 style={{ background: 'rgba(255,255,255,0.06)' }} />
 
               {/* نوع الاختبار */}
               <div>
-                <p className="text-xs text-gray-500 font-bold mb-2">نوع الاختبار</p>
+                <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.exams.type}</p>
                 <div className="flex gap-2">
-                  {[['short','📝 اختبار قصير'],['final','📊 اختبار نهائي']].map(([type, label]) => (
+                  {[['short', ar.admin.exams.short], ['final', ar.admin.exams.final]].map(([type, label]) => (
                     <button key={type} onClick={() => setEType(type as 'short'|'final')}
                       className="flex-1 py-3 rounded-xl font-bold text-sm transition-all"
                       style={{ background: eType === type ? 'linear-gradient(135deg,#f9d423,#ff4e50)' : 'rgba(255,255,255,0.06)', color: eType === type ? '#1a1a2e' : '#718096' }}>
@@ -677,7 +672,7 @@ export default function AdminPage() {
 
               {/* اختيار المادة */}
               <div>
-                <p className="text-xs text-gray-500 font-bold mb-2">📚 المادة</p>
+                <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.units.subject}</p>
                 <div className="flex flex-wrap gap-2">
                   {subjects.map(s => (
                     <button key={s.id} onClick={() => { setSelSubject(s); fetchAllLessonsForSubject(s.id) }}
@@ -692,7 +687,7 @@ export default function AdminPage() {
               {/* اختيار الدروس للاختبار القصير */}
               {eType === 'short' && allLessons.length > 0 && (
                 <div>
-                  <p className="text-xs text-gray-500 font-bold mb-2">✏️ اختر الدروس ({eLessonIds.length} محدد)</p>
+                  <p className="text-xs text-gray-500 font-bold mb-2">{ar.admin.exams.selectLessons(eLessonIds.length)}</p>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {allLessons.map(l => (
                       <button key={l.id}
@@ -712,7 +707,7 @@ export default function AdminPage() {
               )}
 
               <textarea value={eDesc} onChange={e => setEDesc(e.target.value)}
-                placeholder="تعليمات الاختبار أو ملاحظات إضافية (اختياري)"
+                placeholder={ar.admin.exams.descPlaceholder}
                 rows={3}
                 className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 outline-none border border-white/10 resize-y"
                 style={{ background: 'rgba(255,255,255,0.06)', fontFamily: 'inherit' }} />
@@ -720,14 +715,14 @@ export default function AdminPage() {
               <button onClick={saveExam} disabled={saving}
                 className="w-full py-3 rounded-xl font-black text-sm transition-all"
                 style={{ background: saving ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#f9d423,#ff4e50)', color: saving ? '#4a5568' : '#1a1a2e' }}>
-                {saving ? '⏳...' : '➕ إضافة الاختبار'}
+                {saving ? ar.common.savingShort : ar.admin.exams.addButton}
               </button>
             </div>
           </div>
 
           {/* قائمة الاختبارات */}
           <div className="space-y-2">
-            <p className="text-xs text-gray-500 font-bold">📝 الاختبارات ({exams.length})</p>
+            <p className="text-xs text-gray-500 font-bold">{ar.admin.exams.list(exams.length)}</p>
             {exams.map(e => (
               <div key={e.id} className="p-3 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.04)' }}>
                 <div className="flex items-center justify-between">
@@ -736,12 +731,12 @@ export default function AdminPage() {
                       <span className="text-sm font-black text-yellow-400">{e.name}</span>
                       <span className="text-xs px-2 py-0.5 rounded-lg font-bold"
                         style={{ background: e.exam_type === 'short' ? 'rgba(79,172,254,0.15)' : 'rgba(67,233,123,0.15)', color: e.exam_type === 'short' ? '#4facfe' : '#43e97b' }}>
-                        {e.exam_type === 'short' ? '📝 قصير' : '📊 نهائي'}
+                        {e.exam_type === 'short' ? ar.common.examType.shortBadge : ar.common.examType.finalBadge}
                       </span>
                     </div>
-                    {e.exam_type === 'short' && <p className="text-xs text-gray-500 mt-1">{e.lesson_ids?.length} درس محدد</p>}
+                    {e.exam_type === 'short' && <p className="text-xs text-gray-500 mt-1">{ar.common.lessonCountSelected(e.lesson_ids?.length ?? 0)}</p>}
                   </div>
-                  <button onClick={async () => { if (!confirm('حذف الاختبار؟')) return; await fetch('/api/exams', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: e.id, adminId: user.id }) }); fetchExams() }}
+                  <button onClick={async () => { if (!confirm(ar.admin.confirms.deleteExam)) return; await fetch('/api/exams', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: e.id, adminId: user.id }) }); fetchExams() }}
                     className="text-xs px-2 py-1 rounded-lg text-red-400 border border-red-400/30" style={{ background: 'rgba(252,129,129,0.08)' }}>🗑️</button>
                 </div>
               </div>
@@ -750,7 +745,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <p className="text-center text-gray-800 text-xs mt-8">منصة مساعد اللغة العربية • ابتدائي · متوسط · ثانوي</p>
+      <p className="text-center text-gray-800 text-xs mt-8">{ar.common.footerStages}</p>
     </div>
   )
 }

@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import FeedbackButtons   from '@/components/FeedbackButtons'
-import PrintButton       from '@/components/PrintButton'
-import SpeechButton      from '@/components/SpeechButton'
-import WordExportButton  from '@/components/WordExportButton'
-import PptxButton        from '@/components/PptxButton'
+import FeedbackButtons  from '@/components/FeedbackButtons'
+import PrintButton      from '@/components/PrintButton'
+import SpeechButton     from '@/components/SpeechButton'
+import WordExportButton from '@/components/WordExportButton'
+import PptxButton       from '@/components/PptxButton'
+import VisualCard       from '@/components/VisualCard'
 
 const TOOLS = [
   { id: 'explain',   icon: '💡', label: 'شرح الدرس',      desc: 'شرح مبسط مع أمثلة' },
@@ -25,7 +26,9 @@ const THEME_COLORS = [
   { name: 'وردي',    value: '#ec4899', gradient: 'linear-gradient(135deg,#ec4899,#8b5cf6)' },
 ]
 
-const STAGE_NAMES: Record<string, string> = { primary: 'ابتدائي', middle: 'متوسط', high: 'ثانوي' }
+const STAGE_NAMES: Record<string, string> = {
+  primary: 'ابتدائي', middle: 'متوسط', high: 'ثانوي',
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -56,7 +59,7 @@ export default function DashboardPage() {
 
   const isDark = themeMode === 'dark' ||
     (themeMode === 'system' && typeof window !== 'undefined' &&
-     window.matchMedia('(prefers-color-scheme: dark)').matches)
+      window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   const bg        = isDark ? 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' : 'linear-gradient(135deg,#f0f4ff,#e8ecf8,#dde6ff)'
   const cardBg    = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)'
@@ -65,6 +68,15 @@ export default function DashboardPage() {
   const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
   const inputBg   = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.9)'
   const themeGradient = THEME_COLORS.find(c => c.value === themeColor)?.gradient || 'linear-gradient(135deg,#f9d423,#ff4e50)'
+
+  // عنوان النتيجة الآمن
+  const outputTitle = tool === 'exam'
+    ? (selExam?.name ?? 'اختبار')
+    : `${TOOLS.find(t => t.id === tool)?.label ?? ''} — ${selLesson?.name ?? ''}`
+
+  const shortExams = exams.filter(e => e.exam_type === 'short')
+  const finalExams = exams.filter(e => e.exam_type === 'final')
+  const toolData   = TOOLS.find(t => t.id === tool)
 
   useEffect(() => {
     const stored = localStorage.getItem('user')
@@ -140,9 +152,12 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tool: tool || 'exam', grade: selSubject?.grade, stage: selSubject?.stage,
-          prompt: userInput || `${tool === 'exam' ? `أعدّ ${selExam?.name}` : `${TOOLS.find(t => t.id === tool)?.label} لدرس ${selLesson?.name}`}`,
-          userId: user?.id, material: buildMaterial(),
+          tool: tool || 'exam',
+          grade: selSubject?.grade,
+          stage: selSubject?.stage,
+          prompt: userInput || outputTitle,
+          userId: user?.id,
+          material: buildMaterial(),
         }),
       })
       const data = await res.json()
@@ -171,17 +186,13 @@ export default function DashboardPage() {
     localStorage.removeItem('user'); localStorage.removeItem('session'); router.push('/')
   }
 
-  const shortExams = exams.filter(e => e.exam_type === 'short')
-  const finalExams = exams.filter(e => e.exam_type === 'final')
-  const toolData   = TOOLS.find(t => t.id === tool)
-
   return (
     <div dir="rtl" style={{ minHeight: '100vh', padding: '16px', color: textMain, background: bg, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", transition: 'all 0.3s' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 18, fontWeight: 900, margin: 0, background: themeGradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: themeColor }}>
             🌙 مساعد اللغة العربية
           </h1>
           <p style={{ margin: 0, color: textSub, fontSize: 11 }}>
@@ -201,7 +212,7 @@ export default function DashboardPage() {
         <button onClick={() => setShowSettings(true)} style={{ background: cardBg, border: `1px solid ${borderCol}`, color: textSub, borderRadius: 12, padding: '8px 14px', cursor: 'pointer', fontSize: 18 }}>⚙️</button>
       </div>
 
-      {/* القائمة الجانبية للإعدادات */}
+      {/* القائمة الجانبية */}
       {showSettings && (
         <>
           <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40, backdropFilter: 'blur(4px)' }} />
@@ -237,7 +248,7 @@ export default function DashboardPage() {
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: textSub, marginBottom: 10 }}>🌓 وضع العرض</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[['dark','🌙 داكن'],['light','☀️ فاتح'],['system','💻 حسب النظام']].map(([mode, label]) => (
+                {[['dark', '🌙 داكن'], ['light', '☀️ فاتح'], ['system', '💻 حسب النظام']].map(([mode, label]) => (
                   <button key={mode} onClick={() => saveTheme(themeColor, mode)}
                     style={{ padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${themeMode === mode ? themeColor : borderCol}`, background: themeMode === mode ? themeColor + '15' : 'transparent', color: themeMode === mode ? themeColor : textSub, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'right', transition: 'all 0.2s' }}>
                     {label} {themeMode === mode ? '✓' : ''}
@@ -285,7 +296,8 @@ export default function DashboardPage() {
           <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>③ اختر الدرس</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {lessons.map(l => (
-              <button key={l.id} onClick={() => { setSelLesson(l); setTool(null); setOutput(''); setError(''); setExamMode(null); setGenerationId(null) }} style={{ padding: '12px 14px', borderRadius: 12, border: selLesson?.id === l.id ? `2px solid ${themeColor}` : `1.5px solid ${borderCol}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, textAlign: 'right', background: selLesson?.id === l.id ? themeColor + '15' : cardBg, color: selLesson?.id === l.id ? themeColor : textSub, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}>
+              <button key={l.id} onClick={() => { setSelLesson(l); setTool(null); setOutput(''); setError(''); setExamMode(null); setGenerationId(null) }}
+                style={{ padding: '12px 14px', borderRadius: 12, border: selLesson?.id === l.id ? `2px solid ${themeColor}` : `1.5px solid ${borderCol}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, textAlign: 'right', background: selLesson?.id === l.id ? themeColor + '15' : cardBg, color: selLesson?.id === l.id ? themeColor : textSub, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}>
                 <span style={{ color: textSub, fontSize: 11 }}>{l.order_num}.</span>
                 {l.name}
                 {l.file_urls?.length > 0 && <span style={{ fontSize: 11, color: '#4facfe', marginRight: 'auto' }}>📎</span>}
@@ -302,7 +314,8 @@ export default function DashboardPage() {
           {selLesson && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               {TOOLS.filter(t => t.id !== 'exam').map(t => (
-                <button key={t.id} onClick={() => { setTool(t.id); setExamMode(null); setSelExam(null); setOutput(''); setGenerationId(null) }} style={{ padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12, textAlign: 'right', border: tool === t.id ? `2px solid ${themeColor}` : '2px solid transparent', background: tool === t.id ? themeColor + '15' : cardBg, color: tool === t.id ? themeColor : textSub, transition: 'all 0.2s' }}>
+                <button key={t.id} onClick={() => { setTool(t.id); setExamMode(null); setSelExam(null); setOutput(''); setGenerationId(null) }}
+                  style={{ padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12, textAlign: 'right', border: tool === t.id ? `2px solid ${themeColor}` : '2px solid transparent', background: tool === t.id ? themeColor + '15' : cardBg, color: tool === t.id ? themeColor : textSub, transition: 'all 0.2s' }}>
                   <div style={{ fontSize: 20, marginBottom: 3 }}>{t.icon}</div>
                   <div style={{ fontWeight: 900 }}>{t.label}</div>
                   <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{t.desc}</div>
@@ -314,14 +327,18 @@ export default function DashboardPage() {
             <div style={{ padding: 14, borderRadius: 14, border: `1px solid ${borderCol}`, background: cardBg }}>
               <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>📝 الاختبارات</p>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {[['short','📝 قصير'],['final','📊 نهائي']].map(([type, label]) => (
-                  <button key={type} onClick={() => { setExamMode(type as any); setTool('exam'); setSelLesson(null); setSelExam(null); setOutput(''); setGenerationId(null) }} style={{ flex: 1, padding: 9, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: examMode === type ? themeGradient : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', color: examMode === type ? '#1a1a2e' : textSub, transition: 'all 0.2s' }}>{label}</button>
+                {[['short', '📝 قصير'], ['final', '📊 نهائي']].map(([type, label]) => (
+                  <button key={type} onClick={() => { setExamMode(type as any); setTool('exam'); setSelLesson(null); setSelExam(null); setOutput(''); setGenerationId(null) }}
+                    style={{ flex: 1, padding: 9, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: examMode === type ? themeGradient : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', color: examMode === type ? '#1a1a2e' : textSub, transition: 'all 0.2s' }}>
+                    {label}
+                  </button>
                 ))}
               </div>
               {examMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {(examMode === 'short' ? shortExams : finalExams).map(e => (
-                    <button key={e.id} onClick={() => { selectExam(e); setOutput(''); setGenerationId(null) }} style={{ padding: '9px 12px', borderRadius: 10, textAlign: 'right', cursor: 'pointer', fontWeight: 700, fontSize: 12, border: selExam?.id === e.id ? `1px solid ${themeColor}` : `1px solid ${borderCol}`, background: selExam?.id === e.id ? themeColor + '15' : 'transparent', color: selExam?.id === e.id ? themeColor : textSub, transition: 'all 0.2s' }}>
+                    <button key={e.id} onClick={() => { selectExam(e); setOutput(''); setGenerationId(null) }}
+                      style={{ padding: '9px 12px', borderRadius: 10, textAlign: 'right', cursor: 'pointer', fontWeight: 700, fontSize: 12, border: selExam?.id === e.id ? `1px solid ${themeColor}` : `1px solid ${borderCol}`, background: selExam?.id === e.id ? themeColor + '15' : 'transparent', color: selExam?.id === e.id ? themeColor : textSub, transition: 'all 0.2s' }}>
                       {e.name}
                       {e.lesson_ids?.length > 0 && <span style={{ color: textSub, fontSize: 10, marginRight: 6 }}>({e.lesson_ids.length} درس)</span>}
                     </button>
@@ -341,7 +358,7 @@ export default function DashboardPage() {
         <div style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>⑤ تفاصيل إضافية (اختياري)</p>
           <textarea value={userInput} onChange={e => setUserInput(e.target.value)}
-            placeholder={tool === 'explain' ? 'ركز على الأمثلة التطبيقية...' : tool === 'worksheet' ? '5 أنشطة متنوعة...' : tool === 'game' ? 'لعبة جماعية...' : tool === 'plan' ? 'درس 45 دقيقة...' : '10 أسئلة الدرجة من 20...'}
+            placeholder={tool === 'explain' ? 'ركز على الأمثلة التطبيقية...' : tool === 'worksheet' ? '5 أنشطة متنوعة...' : tool === 'game' ? 'لعبة جماعية...' : tool === 'plan' ? 'درس 45 دقيقة...' : tool === 'pptx' ? 'عدد الشرائح المطلوب...' : '10 أسئلة الدرجة من 20...'}
             rows={2}
             style={{ width: '100%', padding: 12, borderRadius: 12, border: `1.5px solid ${borderCol}`, background: inputBg, color: textMain, fontSize: 13, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.9, transition: 'all 0.3s' }} />
         </div>
@@ -351,51 +368,34 @@ export default function DashboardPage() {
 
       {/* زر التوليد */}
       {((tool && tool !== 'exam' && selLesson) || (tool === 'exam' && selExam)) && (
-        <button onClick={handleGenerate} disabled={loading} style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: loading ? (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)') : themeGradient, color: loading ? textSub : '#1a1a2e', fontWeight: 900, fontSize: 15, boxShadow: loading ? 'none' : `0 6px 18px ${themeColor}44`, transition: 'all 0.3s', marginBottom: 20, fontFamily: 'inherit' }}>
-          {loading ? '⏳ جارٍ الاستخراج...' : `✨ ${tool === 'exam' ? `إنشاء ${selExam?.name}` : `${toolData?.label} — ${selLesson?.name}`}`}
+        <button onClick={handleGenerate} disabled={loading}
+          style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: loading ? (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)') : themeGradient, color: loading ? textSub : '#1a1a2e', fontWeight: 900, fontSize: 15, boxShadow: loading ? 'none' : `0 6px 18px ${themeColor}44`, transition: 'all 0.3s', marginBottom: 20, fontFamily: 'inherit' }}>
+          {loading ? '⏳ جارٍ الاستخراج...' : `✨ ${outputTitle}`}
         </button>
       )}
 
       {/* النتيجة */}
       {output && (
         <div style={{ borderRadius: 16, border: `1.5px solid ${themeColor}33`, padding: 16, background: cardBg }}>
-          {/* أدوات النتيجة: نسخ + طباعة + صوت */}
+
+          {/* أدوات النتيجة */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ color: themeColor, fontWeight: 700, fontSize: 13 }}>
-              {tool === 'exam' ? '📝' : toolData?.icon} {tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
+              {toolData?.icon ?? '📝'} {outputTitle}
             </span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {/* نسخ */}
               <button onClick={() => { navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                 style={{ padding: '4px 10px', borderRadius: 8, border: `1px solid ${copied ? '#68d391' : themeColor + '44'}`, background: copied ? 'rgba(72,187,120,0.2)' : themeColor + '15', color: copied ? '#68d391' : themeColor, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
                 {copied ? '✅ تم' : '📋 نسخ'}
               </button>
               {/* طباعة */}
-              <PrintButton
-                content={output}
-                title={tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
-                grade={selSubject?.grade}
-                subject={selSubject?.name}
-                themeColor={themeColor}
-              />
-              {/* تصدير Word */}
-              <WordExportButton
-                content={output}
-                title={tool === 'exam' ? selExam?.name : `${toolData?.label} — ${selLesson?.name}`}
-                grade={selSubject?.grade}
-                subject={selSubject?.name}
-                tool={tool || ''}
-                themeColor={themeColor}
-              />
-              {/* تصدير PowerPoint — للشرح والتحضير فقط */}
+              <PrintButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
+              {/* Word */}
+              <WordExportButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} tool={tool || ''} themeColor={themeColor} />
+              {/* PowerPoint */}
               {(tool === 'explain' || tool === 'plan' || tool === 'pptx') && (
-                <PptxButton
-                  content={output}
-                  title={`${toolData?.label} — ${selLesson?.name}`}
-                  grade={selSubject?.grade}
-                  subject={selSubject?.name}
-                  themeColor={themeColor}
-                />
+                <PptxButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
               )}
             </div>
           </div>
@@ -410,14 +410,22 @@ export default function DashboardPage() {
             <SpeechButton text={output} themeColor={themeColor} />
           </div>
 
+          {/* البطاقة المرئية */}
+          <div style={{ paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
+            <VisualCard
+              content={output}
+              title={outputTitle}
+              grade={selSubject?.grade}
+              subject={selSubject?.name}
+              themeColor={themeColor}
+              userId={user?.id}
+            />
+          </div>
+
           {/* أزرار التقييم */}
           {generationId && user && (
             <div style={{ paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
-              <FeedbackButtons
-                generationId={generationId}
-                userId={user.id}
-                themeColor={themeColor}
-              />
+              <FeedbackButtons generationId={generationId} userId={user.id} themeColor={themeColor} />
             </div>
           )}
         </div>
