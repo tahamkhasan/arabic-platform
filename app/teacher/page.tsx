@@ -60,8 +60,6 @@ export default function TeacherPage() {
 
   const [user,         setUser]         = useState<User | null>(null)
   const [themeColor,   setThemeColor]   = useState('#f9d423')
-  const [themeMode,    setThemeMode]    = useState<'dark'|'light'|'system'>('dark')
-  const [isDark,       setIsDark]       = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [tab,          setTab]          = useState<Tab>('assignments')
 
@@ -131,21 +129,9 @@ export default function TeacherPage() {
       if (u.user_type === 'student') { router.replace('/student'); return }
       setUser(u)
       if (u.theme_color) setThemeColor(u.theme_color)
-      if (u.theme_mode)  setThemeMode(u.theme_mode as 'dark'|'light'|'system')
     } catch { router.replace('/') }
   }, [router])
 
-  useEffect(() => {
-    const calc = () => {
-      if (themeMode === 'dark')  return setIsDark(true)
-      if (themeMode === 'light') return setIsDark(false)
-      setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
-    }
-    calc()
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    mq.addEventListener('change', calc)
-    return () => mq.removeEventListener('change', calc)
-  }, [themeMode])
 
   useEffect(() => {
     if (!user) return
@@ -173,19 +159,19 @@ export default function TeacherPage() {
     fetch(`/api/messages?userId=${user.id}&otherId=${selStudent.id}`).then(r => r.json()).then(d => setMsgList(d.messages ?? []))
   }, [user, selStudent])
 
-  const bg        = isDark ? '#0d0b1e'                : '#f0f4ff'
-  const cardBg    = isDark ? 'rgba(255,255,255,0.08)' : '#ffffff'
-  const textCol   = isDark ? '#f1f5f9'                : '#1a202c'
-  const subCol    = isDark ? '#94a3b8'                : '#4a5568'
-  const borderCol = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'
-  const inputBg   = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'
-  const headerBg  = isDark ? 'rgba(13,11,30,0.97)'   : 'rgba(240,244,255,0.97)'
+  const bg        = T.bg
+  const cardBg    = '#FDFAF5'
+  const textCol   = '#1A1221'
+  const subCol    = '#6B5050'
+  const borderCol = 'rgba(192,57,43,0.15)'
+  const inputBg   = 'rgba(192,57,43,0.05)'
+  const headerBg  = 'rgba(245,240,232,0.97)'
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px', borderRadius: 12,
     border: `1.5px solid ${borderCol}`, background: inputBg,
     color: textCol, fontSize: 14, fontFamily: 'inherit',
-    colorScheme: isDark ? 'dark' : 'light',
+    colorScheme: 'light',
   }
 
   // ── إرسال مهمة ────────────────────────────────────────────────
@@ -326,8 +312,8 @@ export default function TeacherPage() {
   async function saveSettings() {
     if (!user) return
     try {
-      await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, theme_color: themeColor, theme_mode: themeMode }) })
-      const updated = { ...user, theme_color: themeColor, theme_mode: themeMode }
+      await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, theme_color: themeColor, theme_mode: 'light' }) })
+      const updated = { ...user, theme_color: themeColor, theme_mode: 'light' }
       setUser(updated); localStorage.setItem('mosaed_user', JSON.stringify(updated))
     } finally { setShowSettings(false) }
   }
@@ -356,8 +342,8 @@ export default function TeacherPage() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.3s ease; }
         textarea:focus, input:focus, select:focus { outline: none; }
-        select option { background-color: ${isDark ? '#1a1630' : '#ffffff'} !important; color: ${textCol} !important; }
-        select { color-scheme: ${isDark ? 'dark' : 'light'}; }
+        select option { background-color: ${'#FDFAF5'} !important; color: ${textCol} !important; }
+        select { color-scheme: light; }
       `}</style>
 
       {/* الرأس */}
@@ -768,7 +754,7 @@ export default function TeacherPage() {
                               <span style={{ fontSize: 14, fontWeight: 700, color: textCol }}>{s.name}</span>
                               <span style={{ fontSize: 12, color: subCol }}>{s.responseRate}% استجابة</span>
                             </div>
-                            <div style={{ height: 6, borderRadius: 3, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                            <div style={{ height: 6, borderRadius: 3, background: 'rgba(192,57,43,0.08)', overflow: 'hidden' }}>
                               <div style={{ height: '100%', borderRadius: 3, width: `${s.responseRate}%`, background: `linear-gradient(90deg,${themeColor},#ff4e50)`, transition: 'width 0.6s ease' }} />
                             </div>
                           </div>
@@ -814,7 +800,7 @@ export default function TeacherPage() {
                               )}
                             </div>
                           </div>
-                          <div style={{ height: 6, borderRadius: 3, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                          <div style={{ height: 6, borderRadius: 3, background: 'rgba(192,57,43,0.08)', overflow: 'hidden' }}>
                             <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: barColor, transition: 'width 0.6s ease' }} />
                           </div>
                         </div>
@@ -845,7 +831,7 @@ export default function TeacherPage() {
       {showNewG && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowNewG(false) }}>
-          <div style={{ width: '100%', maxWidth: 560, borderRadius: 20, background: isDark ? '#1a1630' : '#fff', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 560, borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>👥 مجموعة جديدة</h3>
               <button onClick={() => setShowNewG(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
@@ -901,7 +887,7 @@ export default function TeacherPage() {
       {openGroup && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setOpenGroup(null) }}>
-          <div style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', borderRadius: 20, background: isDark ? '#1a1630' : '#fff', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>👥 {openGroup.name}</h3>
@@ -957,7 +943,7 @@ export default function TeacherPage() {
       {/* ══ نافذة مراجعة الإجابة ══════════════════════════════ */}
       {openSub && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setOpenSub(null) }}>
-          <div style={{ width: '100%', maxWidth: 700, maxHeight: '92vh', borderRadius: 20, background: isDark ? '#1a1630' : '#fff', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 700, maxHeight: '92vh', borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>✏️ مراجعة إجابة — {openSub.users?.name}</h3>
               <button onClick={() => setOpenSub(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
@@ -1004,7 +990,7 @@ export default function TeacherPage() {
       {/* ══ نافذة عرض الوسائط ══════════════════════════════════ */}
       {openMedia && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setOpenMedia(null) }}>
-          <div style={{ width: '100%', maxWidth: 760, borderRadius: 20, background: isDark ? '#1a1630' : '#fff', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 760, borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 15, fontWeight: 900, color: themeColor, margin: 0 }}>{openMedia.title}</h3>
               <button onClick={() => setOpenMedia(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
@@ -1022,13 +1008,13 @@ export default function TeacherPage() {
               )}
             </div>
           </div>
-        </div>
+        </div>        </div>
       )}
 
       {/* ══ الإعدادات ══════════════════════════════════════════ */}
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}>
-          <div style={{ width: '90%', maxWidth: 380, borderRadius: 24, padding: 28, background: isDark ? '#1a1630' : '#ffffff', border: `1px solid ${borderCol}` }}>
+          <div style={{ width: '90%', maxWidth: 380, borderRadius: 24, padding: 28, background: '#FDFAF5', border: `1px solid ${borderCol}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, margin: 0 }}>⚙️ الإعدادات</h2>
               <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
@@ -1036,16 +1022,9 @@ export default function TeacherPage() {
             <div style={{ marginBottom: 24 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>🎨 لون المظهر</p>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {THEME_COLORS.map(th => <button key={th.value} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px ${isDark ? '#fff' : '#333'}, 0 0 0 6px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
+                {THEME_COLORS.map(th => <button key={th.value} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px #F5F0E8, 0 0 0 5px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
               </div>
             </div>
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>🌓 وضع العرض</p>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {([{ id: 'dark', label: '🌙 داكن' }, { id: 'light', label: '☀️ فاتح' }, { id: 'system', label: '💻 نظام' }] as const).map(mode => (
-                  <button key={mode.id} onClick={() => setThemeMode(mode.id)} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: `2px solid ${themeMode === mode.id ? themeColor : borderCol}`, background: themeMode === mode.id ? `${themeColor}18` : 'transparent', color: themeMode === mode.id ? themeColor : subCol, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>{mode.label}</button>
-                ))}
-              </div>
             </div>
             <button onClick={saveSettings} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},#ff4e50)`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>💾 حفظ</button>
           </div>
