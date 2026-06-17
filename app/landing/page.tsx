@@ -270,9 +270,9 @@ export default function LandingPage() {
           <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:40, position:'relative' }}>
             <div className="hide-mobile" style={{ position:'absolute', top:36, right:'17%', left:'17%', height:1, background:`linear-gradient(90deg,transparent,${C.orange}30,${C.orange}30,transparent)`, zIndex:0 }} />
             {[
-              { n:'١', icon:'📚', title:'اختر المادة والدرس',   desc:'يختار المعلّم المادة والدرس أو يرفع المحتوى العلمي مباشرة في المنصة.' },
-              { n:'٢', icon:'✨', title:'توليد فوري بالذكاء',   desc:'تُنشئ مِداد شرحاً، نشاطاً، اختباراً، أو خطة درس بحسب الحاجة — في ثوانٍ.' },
-              { n:'٣', icon:'🎯', title:'تفاعل ومتابعة',        desc:'يتفاعل المتعلّم مع المحتوى ويحصل على تدريب وتغذية راجعة أوضح وأسرع.' },
+              { n:'1', icon:'📚', title:'اختر المادة والدرس',   desc:'يختار المعلّم المادة والدرس أو يرفع المحتوى العلمي مباشرة في المنصة.' },
+              { n:'2', icon:'✨', title:'توليد فوري بالذكاء',   desc:'تُنشئ مِداد شرحاً، نشاطاً، اختباراً، أو خطة درس بحسب الحاجة — في ثوانٍ.' },
+              { n:'3', icon:'🎯', title:'تفاعل ومتابعة',        desc:'يتفاعل المتعلّم مع المحتوى ويحصل على تدريب وتغذية راجعة أوضح وأسرع.' },
             ].map((s,i) => (
               <div key={i} id={`step-${i}`} ref={setRef(`step-${i}`) as any}
                 style={{ textAlign:'center', position:'relative', zIndex:1, ...anim(`step-${i}`, i*0.15) }}>
@@ -299,15 +299,15 @@ export default function LandingPage() {
 
           <div className="grid-3" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:20 }}>
             {[
-              { icon:'👨‍🏫', title:'المعلّم',          color: C.red,
+              { icon:'👨‍🏫', title:'مُعلّم',          color: C.red,
                 img:'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=500&q=70&auto=format&fit=crop',
                 desc:'الذي يريد اختصار وقت التحضير ورفع جودة الشرح وإدارة طلابه في مكان واحد.',
                 points:['شرح وأوراق عمل فورية','إرسال مهام ومتابعة الإجابات','تحليلات أداء واضحة'] },
-              { icon:'👨‍🎓', title:'المتعلّم',         color: C.orange,
+              { icon:'👨‍🎓', title:'مُتعلّم',         color: C.orange,
                 img:'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=500&q=70&auto=format&fit=crop',
                 desc:'الذي يحتاج تدريباً أوضح ومساراً أبسط في تعلم العربية بطريقة تفاعلية.',
                 points:['شرح مخصص لدروسه','اختبارات تفاعلية وبطاقات حفظ','تتبع درجاته وتقدمه'] },
-              { icon:'🏫',  title:'الجهة التعليمية', color: C.gold,
+              { icon:'🏫',  title:'مَدرسة', color: C.gold,
                 img:'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=500&q=70&auto=format&fit=crop',
                 desc:'التي تبحث عن تنظيم المحتوى والاختبارات والمتابعة في بيئة واحدة متكاملة.',
                 points:['إدارة المعلمين والطلاب','تقارير أداء شاملة','محتوى موحّد ومنظم'] },
