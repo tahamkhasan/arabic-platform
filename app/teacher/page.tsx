@@ -353,7 +353,7 @@ export default function TeacherPage() {
           <div>
             <div style={{ fontSize: 16, fontWeight: 900, color: themeColor }}>{c.platformName}</div>
             <div style={{ fontSize: 13, color: subCol, marginTop: 2 }}>👨‍🏫 {user.name} • معلم</div>
-
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push('/dashboard')} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${themeColor}44`, background: `${themeColor}15`, color: themeColor, cursor: 'pointer', fontFamily: 'inherit' }}>✨ أدوات التوليد</button>
@@ -1008,7 +1008,7 @@ export default function TeacherPage() {
               )}
             </div>
           </div>
-        </div>        </div>
+        </div>
       )}
 
       {/* ══ الإعدادات ══════════════════════════════════════════ */}
@@ -1025,7 +1025,6 @@ export default function TeacherPage() {
                 {THEME_COLORS.map(th => <button key={th.value} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px #F5F0E8, 0 0 0 5px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
               </div>
             </div>
-            </div>
             <button onClick={saveSettings} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},#ff4e50)`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>💾 حفظ</button>
           </div>
         </div>
@@ -1039,10 +1038,10 @@ function EmptyState({ icon, title, sub, cardBg, borderCol, textCol, subCol }: {
   cardBg: string; borderCol: string; textCol: string; subCol: string
 }) {
   return (
-    <div style={{ textAlign: 'center', padding: '60px 20px', background: cardBg, borderRadius: 18, border: `1.5px solid ${borderCol}` }}>
+    <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FDFAF5', borderRadius: 18, border: '1.5px solid rgba(192,57,43,0.15)' }}>
       <div style={{ fontSize: 52, marginBottom: 14 }}>{icon}</div>
-      <h3 style={{ fontSize: 17, fontWeight: 800, color: textCol, marginBottom: 8 }}>{title}</h3>
-      <p style={{ fontSize: 14, color: subCol, opacity: 0.8 }}>{sub}</p>
+      <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1A1221', marginBottom: 8 }}>{title}</h3>
+      <p style={{ fontSize: 14, color: '#6B5050', opacity: 0.8 }}>{sub}</p>
     </div>
   )
 }
