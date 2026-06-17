@@ -159,7 +159,7 @@ export default function TeacherPage() {
     fetch(`/api/messages?userId=${user.id}&otherId=${selStudent.id}`).then(r => r.json()).then(d => setMsgList(d.messages ?? []))
   }, [user, selStudent])
 
-  const bg        = T.bg
+  const bg        = '#F5F0E8'
   const cardBg    = '#FDFAF5'
   const textCol   = '#1A1221'
   const subCol    = '#6B5050'
@@ -353,7 +353,7 @@ export default function TeacherPage() {
           <div>
             <div style={{ fontSize: 16, fontWeight: 900, color: themeColor }}>{c.platformName}</div>
             <div style={{ fontSize: 13, color: subCol, marginTop: 2 }}>👨‍🏫 {user.name} • معلم</div>
-          </div>
+
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push('/dashboard')} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${themeColor}44`, background: `${themeColor}15`, color: themeColor, cursor: 'pointer', fontFamily: 'inherit' }}>✨ أدوات التوليد</button>
