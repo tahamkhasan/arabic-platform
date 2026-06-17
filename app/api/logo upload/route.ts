@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 // POST /api/platform-settings/logo
-// يرفع الشعار إلى Supabase Storage ويحدث platform_settings
+// يحوّل الصورة إلى base64 ويخزّنها مباشرة في platform_settings
+// لا يحتاج Supabase Storage
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get('logo') as File | null
 
-    if (!file) return NextResponse.json({ error: 'لم يُرفع ملف' }, { status: 400 })
+    if (!file) {
+      return NextResponse.json({ error: 'لم يُرفع ملف' }, { status: 400 })
+    }
 
     // التحقق من النوع
     if (!file.type.startsWith('image/')) {
@@ -20,33 +24,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'الصورة يجب أن تكون أقل من 2MB' }, { status: 400 })
     }
 
-    const ext      = file.name.split('.').pop() ?? 'png'
-    const fileName = `logo-midad.${ext}`
-    const buffer   = Buffer.from(await file.arrayBuffer())
+    // تحويل إلى base64
+    const buffer     = await file.arrayBuffer()
+    const base64     = Buffer.from(buffer).toString('base64')
+    const dataUrl    = `data:${file.type};base64,${base64}`
 
-    // رفع إلى Supabase Storage bucket: 'public'
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from('public')
-      .upload(fileName, buffer, {
-        contentType:  file.type,
-        upsert:       true,
-      })
-
-    if (uploadError) throw uploadError
-
-    // جلب الرابط العام
-    const { data: urlData } = supabaseAdmin.storage
-      .from('public')
-      .getPublicUrl(fileName)
-
-    const publicUrl = urlData.publicUrl
-
-    // حفظ الرابط في platform_settings
-    await supabaseAdmin
+    // حفظ في platform_settings
+    const { error } = await supabaseAdmin
       .from('platform_settings')
-      .upsert({ key: 'logo_url', value: publicUrl }, { onConflict: 'key' })
+      .upsert({ key: 'logo_url', value: dataUrl }, { onConflict: 'key' })
 
-    return NextResponse.json({ success: true, url: publicUrl })
+    if (error) throw error
+
+    return NextResponse.json({ success: true, url: dataUrl })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'خطأ في الرفع'
     return NextResponse.json({ error: message }, { status: 500 })
