@@ -25,12 +25,12 @@ const FLOATING_WORDS = ar.login.floatingWords.map((text, i) => ({
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail]       = useState('')
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [showPw, setShowPw]     = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
-  const [mounted, setMounted]   = useState(false)
+  const [showPw,   setShowPw]   = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+  const [mounted,  setMounted]  = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -45,12 +45,16 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) return setError(data.error || ar.login.errors.loginFailed)
-      localStorage.setItem('user', JSON.stringify(data.user))
-      localStorage.setItem('session', JSON.stringify(data.session))
-      if (data.user?.role === 'admin') router.push('/admin')
-      else router.push('/dashboard')
+
+      // ✅ التصحيح — نفس المفاتيح التي يقرأها الداشبورد
+      localStorage.setItem('mosaed_user',    JSON.stringify(data.user))
+      localStorage.setItem('mosaed_session', JSON.stringify(data.session))
+
+      if (data.user?.role === 'admin')              router.push('/admin')
+      else if (data.user?.user_type === 'student') router.push('/student')
+      else                                         router.push('/dashboard')
     } catch { setError(ar.login.errors.tryAgain) }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   return (
@@ -72,22 +76,20 @@ export default function LoginPage() {
         ].map((c, i) => (
           <div key={i} style={{
             position: 'absolute', width: c.w, height: c.h,
-            top: c.top, bottom: c.bottom, right: c.right, left: c.left,
+            top: c.top, bottom: (c as { bottom?: string }).bottom,
+            right: (c as { right?: string }).right, left: c.left,
             borderRadius: '50%',
             background: `radial-gradient(circle, ${c.c1}, ${c.c2}, transparent)`,
             animation: `pulse ${3 + i}s ease-in-out infinite alternate`,
           }} />
         ))}
 
-        {/* كلمات عائمة — أكثر وضوحاً */}
+        {/* كلمات عائمة */}
         {mounted && FLOATING_WORDS.map((word, i) => (
           <div key={i} style={{
-            position: 'absolute',
-            left: word.left,
-            top: word.top,
+            position: 'absolute', left: word.left, top: word.top,
             color: `rgba(249,212,35,${word.opacity})`,
-            fontSize: word.size,
-            fontWeight: 900,
+            fontSize: word.size, fontWeight: 900,
             animation: `float ${5 + (i % 3)}s ease-in-out infinite alternate`,
             animationDelay: `${i * 0.4}s`,
             userSelect: 'none',
@@ -129,22 +131,20 @@ export default function LoginPage() {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
-        .card-animate  { animation: slideUp 0.6s ease forwards; }
-        .input-field   { transition: all 0.3s; }
-        .input-field:focus { border-color: rgba(249,212,35,0.6) !important; box-shadow: 0 0 0 3px rgba(249,212,35,0.12) !important; }
-        .btn-main:hover    { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(249,212,35,0.45) !important; }
-        .btn-main:active   { transform: translateY(0px); }
+        .card-animate        { animation: slideUp 0.6s ease forwards; }
+        .input-field         { transition: all 0.3s; }
+        .input-field:focus   { border-color: rgba(249,212,35,0.6) !important; box-shadow: 0 0 0 3px rgba(249,212,35,0.12) !important; }
+        .btn-main:hover      { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(249,212,35,0.45) !important; }
+        .btn-main:active     { transform: translateY(0px); }
         .btn-secondary:hover { border-color: rgba(255,255,255,0.25) !important; color: #e2e8f0 !important; background: rgba(255,255,255,0.06) !important; }
-        .btn-forgot:hover  { color: #f9d423 !important; }
+        .btn-forgot:hover    { color: #f9d423 !important; }
       `}</style>
 
       {/* البطاقة الرئيسية */}
       <div className="card-animate" style={{
         width: '100%', maxWidth: 400, position: 'relative', zIndex: 10,
-        background: 'rgba(255,255,255,0.04)',
-        backdropFilter: 'blur(24px)',
-        borderRadius: 28,
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(24px)',
+        borderRadius: 28, border: '1px solid rgba(255,255,255,0.1)',
         padding: '40px 32px',
         boxShadow: '0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
       }}>
@@ -182,28 +182,42 @@ export default function LoginPage() {
           {/* البريد */}
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>📧</span>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder={ar.login.emailPlaceholder} className="input-field"
-              style={{ width: '100%', padding: '14px 44px 14px 14px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <input
+              type="email" value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              placeholder={ar.login.emailPlaceholder}
+              className="input-field"
+              style={{ width: '100%', padding: '14px 44px 14px 14px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+            />
           </div>
 
           {/* كلمة المرور */}
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>🔑</span>
-            <input type={showPw ? 'text' : 'password'} value={password}
+            <input
+              type={showPw ? 'text' : 'password'} value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder={ar.login.passwordPlaceholder} className="input-field"
-              style={{ width: '100%', padding: '14px 44px 14px 44px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-            <button onClick={() => setShowPw(p => !p)} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }}>
+              placeholder={ar.login.passwordPlaceholder}
+              className="input-field"
+              style={{ width: '100%', padding: '14px 44px 14px 44px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+            />
+            <button
+              onClick={() => setShowPw(p => !p)}
+              style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }}
+            >
               {showPw ? '🙈' : '👁️'}
             </button>
           </div>
 
           {/* نسيت كلمة المرور */}
           <div style={{ textAlign: 'left' }}>
-            <button onClick={() => router.push('/forgot-password')} className="btn-forgot"
-              style={{ background: 'none', border: 'none', color: '#4a5568', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.2s' }}>
+            <button
+              onClick={() => router.push('/forgot-password')}
+              className="btn-forgot"
+              style={{ background: 'none', border: 'none', color: '#4a5568', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.2s' }}
+            >
               {ar.login.forgotPassword}
             </button>
           </div>
@@ -216,15 +230,20 @@ export default function LoginPage() {
           )}
 
           {/* زر الدخول */}
-          <button onClick={handleLogin} disabled={loading} className="btn-main" style={{
-            width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            background: loading ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg,#f9d423,#ff4e50)',
-            color: loading ? '#4a5568' : '#1a1a2e', fontWeight: 900, fontSize: 16,
-            fontFamily: 'inherit', transition: 'all 0.3s',
-            boxShadow: loading ? 'none' : '0 6px 20px rgba(249,212,35,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          }}>
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            className="btn-main"
+            style={{
+              width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              background: loading ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg,#f9d423,#ff4e50)',
+              color: loading ? '#4a5568' : '#1a1a2e', fontWeight: 900, fontSize: 16,
+              fontFamily: 'inherit', transition: 'all 0.3s',
+              boxShadow: loading ? 'none' : '0 6px 20px rgba(249,212,35,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
             {loading ? (
               <>
                 <span style={{ width: 18, height: 18, border: '2px solid #4a5568', borderTopColor: '#718096', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
@@ -241,13 +260,17 @@ export default function LoginPage() {
           </div>
 
           {/* زر التسجيل */}
-          <button onClick={() => router.push('/register')} className="btn-secondary" style={{
-            width: '100%', padding: '13px', borderRadius: 14,
-            border: '1.5px solid rgba(255,255,255,0.1)',
-            background: 'rgba(255,255,255,0.03)', color: '#718096',
-            fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            fontFamily: 'inherit', transition: 'all 0.3s',
-          }}>
+          <button
+            onClick={() => router.push('/register')}
+            className="btn-secondary"
+            style={{
+              width: '100%', padding: '13px', borderRadius: 14,
+              border: '1.5px solid rgba(255,255,255,0.1)',
+              background: 'rgba(255,255,255,0.03)', color: '#718096',
+              fontWeight: 700, fontSize: 14, cursor: 'pointer',
+              fontFamily: 'inherit', transition: 'all 0.3s',
+            }}
+          >
             {ar.login.registerButton}
           </button>
         </div>

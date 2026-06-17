@@ -1,439 +1,602 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import FeedbackButtons  from '@/components/FeedbackButtons'
-import PrintButton      from '@/components/PrintButton'
-import SpeechButton     from '@/components/SpeechButton'
-import WordExportButton from '@/components/WordExportButton'
-import PptxButton       from '@/components/PptxButton'
-import VisualCard       from '@/components/VisualCard'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter }         from 'next/navigation'
+import { ar }                from '@/lib/constants/ar'
+import FeedbackButtons       from '@/components/FeedbackButtons'
+import PrintButton           from '@/components/PrintButton'
+import SpeechButton          from '@/components/SpeechButton'
+import WordExportButton      from '@/components/WordExportButton'
+import PptxButton            from '@/components/PptxButton'
+import VisualCard            from '@/components/VisualCard'
+import MarkdownRenderer      from '@/components/MarkdownRenderer'
+import NotificationBell from '@/components/NotificationBell'
 
-const TOOLS = [
-  { id: 'explain',   icon: '💡', label: 'شرح الدرس',      desc: 'شرح مبسط مع أمثلة' },
-  { id: 'worksheet', icon: '📋', label: 'ورقة عمل',       desc: 'أنشطة تفاعلية' },
-  { id: 'game',      icon: '🎮', label: 'لعبة لغوية',     desc: 'نشاط ممتع وتعليمي' },
-  { id: 'plan',      icon: '📖', label: 'تحضير الدرس',    desc: 'خطة درس كاملة' },
-  { id: 'pptx',      icon: '📊', label: 'عرض PowerPoint', desc: 'شرائح جاهزة للعرض' },
-  { id: 'exam',      icon: '📝', label: 'اختبار',          desc: 'أسئلة متنوعة' },
-]
+const t = ar.dashboard
+const c = ar.common
 
-const THEME_COLORS = [
-  { name: 'ذهبي',    value: '#f9d423', gradient: 'linear-gradient(135deg,#f9d423,#ff4e50)' },
-  { name: 'أزرق',    value: '#4facfe', gradient: 'linear-gradient(135deg,#4facfe,#00f2fe)' },
-  { name: 'أخضر',    value: '#43e97b', gradient: 'linear-gradient(135deg,#43e97b,#38f9d7)' },
-  { name: 'بنفسجي',  value: '#a78bfa', gradient: 'linear-gradient(135deg,#a78bfa,#ec4899)' },
-  { name: 'برتقالي', value: '#f97316', gradient: 'linear-gradient(135deg,#f97316,#ef4444)' },
-  { name: 'وردي',    value: '#ec4899', gradient: 'linear-gradient(135deg,#ec4899,#8b5cf6)' },
-]
+interface User    { id: string; name: string; role: string; user_type: string; theme_color?: string; theme_mode?: string }
+interface Subject { id: string; name: string; icon?: string; grade?: string; stage?: string }
+interface Unit    { id: string; name: string; icon?: string }
+interface Lesson  { id: string; name: string; content?: string; file_urls?: string[] }
+interface Exam    { id: string; name: string; exam_type: 'short' | 'final' }
 
-const STAGE_NAMES: Record<string, string> = {
-  primary: 'ابتدائي', middle: 'متوسط', high: 'ثانوي',
-}
+const TOOLS = t.tools as readonly { id: string; icon: string; label: string; desc: string }[]
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser]               = useState<any>(null)
-  const [subjects, setSubjects]       = useState<any[]>([])
-  const [units, setUnits]             = useState<any[]>([])
-  const [lessons, setLessons]         = useState<any[]>([])
-  const [exams, setExams]             = useState<any[]>([])
-  const [selSubject, setSelSubject]   = useState<any>(null)
-  const [selUnit, setSelUnit]         = useState<any>(null)
-  const [selLesson, setSelLesson]     = useState<any>(null)
-  const [tool, setTool]               = useState<string | null>(null)
-  const [examMode, setExamMode]       = useState<'short' | 'final' | null>(null)
-  const [selExam, setSelExam]         = useState<any>(null)
-  const [examLessons, setExamLessons] = useState<any[]>([])
-  const [userInput, setUserInput]     = useState('')
-  const [output, setOutput]           = useState('')
-  const [generationId, setGenerationId] = useState<string | null>(null)
-  const [loading, setLoading]         = useState(false)
-  const [error, setError]             = useState('')
-  const [copied, setCopied]           = useState(false)
 
-  // إعدادات المظهر
-  const [showSettings, setShowSettings] = useState(false)
-  const [themeColor, setThemeColor]     = useState('#f9d423')
-  const [themeMode, setThemeMode]       = useState<'dark' | 'light' | 'system'>('dark')
-  const [savingTheme, setSavingTheme]   = useState(false)
+  const [user,           setUser]           = useState<User | null>(null)
+  const [themeColor,     setThemeColor]     = useState('#f9d423')
+  const [themeMode,      setThemeMode]      = useState<'dark' | 'light' | 'system'>('dark')
+  const [showSettings,   setShowSettings]   = useState(false)
+  const [savingSettings, setSavingSettings] = useState(false)
 
-  const isDark = themeMode === 'dark' ||
-    (themeMode === 'system' && typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [subjects,   setSubjects]   = useState<Subject[]>([])
+  const [units,      setUnits]      = useState<Unit[]>([])
+  const [lessons,    setLessons]    = useState<Lesson[]>([])
+  const [exams,      setExams]      = useState<Exam[]>([])
 
-  const bg        = isDark ? 'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)' : 'linear-gradient(135deg,#f0f4ff,#e8ecf8,#dde6ff)'
-  const cardBg    = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)'
-  const textMain  = isDark ? '#e2e8f0' : '#1a1a2e'
-  const textSub   = isDark ? '#718096' : '#4a5568'
-  const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
-  const inputBg   = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.9)'
-  const themeGradient = THEME_COLORS.find(c => c.value === themeColor)?.gradient || 'linear-gradient(135deg,#f9d423,#ff4e50)'
+  const [selSubject, setSelSubject] = useState<Subject | null>(null)
+  const [selUnit,    setSelUnit]    = useState<Unit | null>(null)
+  const [selLesson,  setSelLesson]  = useState<Lesson | null>(null)
+  const [selExam,    setSelExam]    = useState<Exam | null>(null)
+  const [tool,       setTool]       = useState<string>('')
+  const [examType,   setExamType]   = useState<'short' | 'final'>('short')
+  const [details,    setDetails]    = useState('')
 
-  // عنوان النتيجة الآمن
-  const outputTitle = tool === 'exam'
-    ? (selExam?.name ?? 'اختبار')
-    : `${TOOLS.find(t => t.id === tool)?.label ?? ''} — ${selLesson?.name ?? ''}`
+  const [output,     setOutput]     = useState('')
+  const [genId,      setGenId]      = useState('')
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState('')
+  const [copied,     setCopied]     = useState(false)
 
-  const shortExams = exams.filter(e => e.exam_type === 'short')
-  const finalExams = exams.filter(e => e.exam_type === 'final')
-  const toolData   = TOOLS.find(t => t.id === tool)
+  const [isEditing,  setIsEditing]  = useState(false)
+  const [editedText, setEditedText] = useState('')
+  const [savedText,  setSavedText]  = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editSaved,  setEditSaved]  = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // ── تحميل المستخدم مع حارس الطالب ───────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem('mosaed_user')
+    if (!saved) { router.replace('/'); return }
+    try {
+      const u = JSON.parse(saved) as User
+      // ✅ الطالب ليس له مكان هنا — أعده لصفحته
+// ✅ الطالب ليس له مكان هنا — أعده لصفحته
+if (u.user_type === 'student') { router.replace('/student'); return }      setUser(u)
+      if (u.theme_color) setThemeColor(u.theme_color)
+      if (u.theme_mode)  setThemeMode(u.theme_mode as 'dark' | 'light' | 'system')
+    } catch { router.replace('/') }
+  }, [router])
 
   useEffect(() => {
-    const stored = localStorage.getItem('user')
-    if (!stored) return router.push('/')
-    const u = JSON.parse(stored)
-    setUser(u)
-    setThemeColor(u.theme_color || '#f9d423')
-    setThemeMode(u.theme_mode || 'dark')
-    fetchSubjects(u)
-  }, [])
+    if (!user) return
+    fetch('/api/subjects').then(r => r.json()).then(d => setSubjects(d.subjects ?? [])).catch(console.error)
+  }, [user])
 
-  async function fetchSubjects(u: any) {
-    const params = new URLSearchParams()
-    if (u.user_type === 'teacher' && u.allowed_stages?.length > 0)
-      params.append('stages', u.allowed_stages.join(','))
-    if (u.user_type === 'student') {
-      if (u.allowed_stages?.length > 0) params.append('stage', u.allowed_stages[0])
-      if (u.allowed_grades?.length > 0) params.append('grade', u.allowed_grades[0])
+  useEffect(() => {
+    if (!selSubject) { setUnits([]); setSelUnit(null); return }
+    fetch(`/api/units?subjectId=${selSubject.id}`).then(r => r.json()).then(d => setUnits(d.units ?? [])).catch(console.error)
+  }, [selSubject])
+
+  useEffect(() => {
+    if (!selUnit) { setLessons([]); setSelLesson(null); return }
+    fetch(`/api/lessons?unitId=${selUnit.id}`).then(r => r.json()).then(d => setLessons(d.lessons ?? [])).catch(console.error)
+  }, [selUnit])
+
+  useEffect(() => {
+    if (tool !== 'exam' || !selSubject) { setExams([]); return }
+    fetch(`/api/exams?subjectId=${selSubject.id}&type=${examType}`).then(r => r.json()).then(d => setExams(d.exams ?? [])).catch(console.error)
+  }, [tool, selSubject, examType])
+
+  // ── isDark reactive ───────────────────────────────────────────
+  const [isDark, setIsDark] = useState(true)
+  useEffect(() => {
+    const calc = () => {
+      if (themeMode === 'dark')  return setIsDark(true)
+      if (themeMode === 'light') return setIsDark(false)
+      setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
     }
-    const res = await fetch(`/api/subjects?${params}`)
-    const d = await res.json()
-    setSubjects(d.subjects || [])
-  }
+    calc()
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    mq.addEventListener('change', calc)
+    return () => mq.removeEventListener('change', calc)
+  }, [themeMode])
 
-  async function selectSubject(s: any) {
-    setSelSubject(s); setSelUnit(null); setSelLesson(null)
-    setUnits([]); setLessons([]); setOutput(''); setError(''); setGenerationId(null)
-    const [uRes, eRes] = await Promise.all([
-      fetch(`/api/units?subject_id=${s.id}`),
-      fetch(`/api/exams?subject_id=${s.id}`),
-    ])
-    const [uD, eD] = await Promise.all([uRes.json(), eRes.json()])
-    setUnits(uD.units || [])
-    setExams(eD.exams || [])
-  }
+  const bg        = isDark ? '#0d0b1e'                : '#f0f4ff'
+  const cardBg    = isDark ? 'rgba(255,255,255,0.07)' : '#ffffff'
+  const textCol   = isDark ? '#f1f5f9'                : '#1a202c'
+  const subCol    = isDark ? '#94a3b8'                : '#4a5568'
+  const borderCol = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'
+  const inputBg   = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'
+  const headerBg  = isDark ? 'rgba(13,11,30,0.97)'   : 'rgba(240,244,255,0.97)'
 
-  async function selectUnit(u: any) {
-    setSelUnit(u); setSelLesson(null); setLessons([]); setOutput(''); setError(''); setGenerationId(null)
-    const res = await fetch(`/api/lessons?unit_id=${u.id}`)
-    const d = await res.json()
-    setLessons(d.lessons || [])
-  }
-
-  async function selectExam(exam: any) {
-    setSelExam(exam)
-    if (exam.lesson_ids?.length > 0) {
-      const res = await fetch(`/api/lessons?lesson_ids=${exam.lesson_ids.join(',')}`)
-      const d = await res.json()
-      setExamLessons(d.lessons || [])
-    }
-  }
-
-  function buildMaterial() {
-    if (tool === 'exam' && selExam) {
-      let ctx = `اسم الاختبار: ${selExam.name}\nنوع الاختبار: ${selExam.exam_type === 'short' ? 'اختبار قصير' : 'اختبار نهائي'}\n`
-      if (selExam.description) ctx += `تعليمات: ${selExam.description}\n`
-      if (examLessons.length > 0) {
-        ctx += '\nمحتوى الدروس:\n'
-        examLessons.forEach(l => { ctx += `\n━━ ${l.name} ━━\n${l.content || ''}\n` })
-      }
-      return ctx
-    }
-    if (!selLesson) return ''
-    return `المادة: ${selSubject?.name}\nالوحدة: ${selUnit?.name}\nالدرس: ${selLesson.name}\n${selLesson.description ? `الوصف: ${selLesson.description}\n` : ''}${selLesson.content ? `\nالمادة العلمية:\n${selLesson.content}` : ''}`
-  }
-
-  async function handleGenerate() {
-    if (tool === 'exam') { if (!selExam) return setError('اختر الاختبار أولاً') }
-    else { if (!selLesson) return setError('اختر الدرس أولاً'); if (!tool) return setError('اختر الأداة أولاً') }
-    setError(''); setOutput(''); setLoading(true); setGenerationId(null)
+  const handleGenerate = useCallback(async () => {
+    if (!user || !selSubject || (!selLesson && tool !== 'exam') || !tool) return
+    setLoading(true); setOutput(''); setError('')
+    setIsEditing(false); setEditedText(''); setSavedText('')
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: tool || 'exam',
-          grade: selSubject?.grade,
-          stage: selSubject?.stage,
-          prompt: userInput || outputTitle,
-          userId: user?.id,
-          material: buildMaterial(),
-        }),
+      const promptText = tool === 'exam'
+        ? `${selExam?.name ?? ''} ${details}`.trim()
+        : `${selLesson?.name ?? ''} ${details}`.trim()
+
+      const body: Record<string, unknown> = {
+        userId:   user.id,
+        tool,
+        grade:    selSubject.grade   ?? '',
+        stage:    selSubject.stage   ?? '',
+        prompt:   promptText,
+        material: tool === 'exam' ? '' : (selLesson?.content ?? ''),
+      }
+
+      const res  = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) return setError(data.error || 'حدث خطأ')
+      if (!res.ok) { setError(data.error || c.errors.generic); return }
       setOutput(data.result)
-      setGenerationId(data.generation_id ?? null)
-    } catch { setError('خطأ في الاتصال.') }
-    setLoading(false)
+      setSavedText(data.result)
+      setGenId(data.generation_id ?? data.id ?? '')
+    } catch {
+      setError(c.errors.connection)
+    } finally { setLoading(false) }
+  }, [user, selSubject, selLesson, selExam, tool, details])
+
+  function startEditing()   { setEditedText(savedText || output); setIsEditing(true); setTimeout(() => textareaRef.current?.focus(), 100) }
+  function cancelEditing()  { setIsEditing(false); setEditedText('') }
+  function restoreOriginal(){ setEditedText(output) }
+
+  async function saveEdit() {
+    if (!genId || !user) return
+    setSavingEdit(true)
+    try {
+      await fetch('/api/history', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: genId, userId: user.id, action: 'edit', value: editedText }),
+      })
+      setSavedText(editedText); setIsEditing(false)
+      setEditSaved(true); setTimeout(() => setEditSaved(false), 2500)
+    } finally { setSavingEdit(false) }
   }
 
-  async function saveTheme(color: string, mode: string) {
-    setSavingTheme(true)
-    setThemeColor(color); setThemeMode(mode as any)
-    const updatedUser = { ...user, theme_color: color, theme_mode: mode }
-    setUser(updatedUser)
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, theme_color: color, theme_mode: mode }),
-    })
-    setSavingTheme(false)
+  async function saveSettings() {
+    if (!user) return
+    setSavingSettings(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, theme_color: themeColor, theme_mode: themeMode }),
+      })
+      const updated = { ...user, theme_color: themeColor, theme_mode: themeMode }
+      setUser(updated)
+      localStorage.setItem('mosaed_user', JSON.stringify(updated))
+    } finally { setSavingSettings(false); setShowSettings(false) }
   }
 
-  function handleLogout() {
-    localStorage.removeItem('user'); localStorage.removeItem('session'); router.push('/')
+  async function handleLogout() {
+    await fetch('/api/auth', { method: 'DELETE' })
+    localStorage.removeItem('mosaed_user')
+    localStorage.removeItem('mosaed_session')
+    router.replace('/')
   }
+
+  const canGenerate = selSubject && tool && (tool === 'exam' ? !!selExam : !!selLesson)
+  const toolData    = TOOLS.find(x => x.id === tool)
+  const isModified  = savedText !== output && savedText !== ''
+  const displayText = savedText || output
+
+  if (!user) return null
 
   return (
-    <div dir="rtl" style={{ minHeight: '100vh', padding: '16px', color: textMain, background: bg, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", transition: 'all 0.3s' }}>
+    <div dir="rtl" style={{ minHeight: '100vh', background: bg, color: textCol, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif" }}>
+      <style>{`
+        * { box-sizing: border-box; } body { margin: 0; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .result-fade { animation: fadeIn 0.4s ease; }
+        textarea:focus { outline: none; }
+      `}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: themeColor }}>
-            🌙 مساعد اللغة العربية
-          </h1>
-          <p style={{ margin: 0, color: textSub, fontSize: 11 }}>
-            أهلاً {user?.name || user?.email} 👋
-            {user?.user_type === 'teacher' && user?.allowed_stages?.length > 0 && (
-              <span style={{ marginRight: 8, color: themeColor, fontSize: 10 }}>
-                ({user.allowed_stages.map((s: string) => STAGE_NAMES[s]).join('، ')})
-              </span>
-            )}
-            {user?.user_type === 'student' && (
-              <span style={{ marginRight: 8, color: themeColor, fontSize: 10 }}>
-                (الصف {user?.allowed_grades?.[0]})
-              </span>
-            )}
-          </p>
+      {/* ══ الرأس ══════════════════════════════════════════════ */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        background: headerBg, backdropFilter: 'blur(20px)',
+        borderBottom: `1px solid ${borderCol}`,
+        padding: '14px 28px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 28 }}>🌙</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: themeColor, lineHeight: 1.2 }}>{c.platformName}</div>
+            <div style={{ fontSize: 13, color: subCol, marginTop: 2 }}>
+              {t.greeting(user.name)} • {user.role === 'admin' ? '👑 مدير' : '👨‍🏫 معلم'}
+            </div>
+          </div>
         </div>
-        <button onClick={() => setShowSettings(true)} style={{ background: cardBg, border: `1px solid ${borderCol}`, color: textSub, borderRadius: 12, padding: '8px 14px', cursor: 'pointer', fontSize: 18 }}>⚙️</button>
-      </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <HeaderBtn label="👨‍🏫 إدارة الطلاب" color={themeColor} bordered onClick={() => router.push('/teacher')} />
+          <HeaderBtn label="📚 سجل التوليدات" color={themeColor} bordered onClick={() => router.push('/history')} />
+          <HeaderBtn label={t.settings.title} color={subCol} isDark={isDark} onClick={() => setShowSettings(true)} />
+          <HeaderBtn label={c.logout} color="#fc8181" danger onClick={handleLogout} />
+          <NotificationBell
+            userId={user.id}
+            themeColor={themeColor}
+            textCol={textCol}
+            subCol={subCol}
+            cardBg={cardBg}
+            borderCol={borderCol}
+            inputBg={inputBg}
+            isDark={isDark}
+          />
+        </div>
+      </header>
 
-      {/* القائمة الجانبية */}
-      {showSettings && (
-        <>
-          <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40, backdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 300, zIndex: 50, background: isDark ? '#0d1117' : '#ffffff', borderRight: `1px solid ${borderCol}`, padding: 24, overflowY: 'auto', boxShadow: '4px 0 30px rgba(0,0,0,0.3)', animation: 'slideIn 0.3s ease' }}>
-            <style>{`@keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }`}</style>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: textMain }}>⚙️ الإعدادات</h2>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: textSub, cursor: 'pointer', fontSize: 20 }}>✕</button>
-            </div>
-            <div style={{ padding: 14, borderRadius: 14, marginBottom: 20, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', border: `1px solid ${borderCol}` }}>
-              <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 14, color: textMain }}>{user?.name}</p>
-              <p style={{ margin: 0, fontSize: 12, color: textSub }}>{user?.email}</p>
-              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 8, background: themeColor + '22', color: themeColor, fontWeight: 700 }}>
-                {user?.user_type === 'teacher' ? '👨‍🏫 معلم' : '👨‍🎓 طالب'}
-              </span>
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: textSub, marginBottom: 10 }}>🎨 لون المظهر</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-                {THEME_COLORS.map(c => (
-                  <button key={c.value} onClick={() => saveTheme(c.value, themeMode)}
-                    style={{ padding: '10px 6px', borderRadius: 12, border: themeColor === c.value ? `2px solid ${c.value}` : '2px solid transparent', background: c.gradient, cursor: 'pointer', color: '#1a1a2e', fontWeight: 700, fontSize: 11, transition: 'all 0.2s', boxShadow: themeColor === c.value ? `0 4px 12px ${c.value}44` : 'none' }}>
-                    {themeColor === c.value ? '✓ ' : ''}{c.name}
-                  </button>
+      {/* ══ المحتوى ════════════════════════════════════════════ */}
+      <main style={{ maxWidth: 960, margin: '0 auto', padding: '28px 20px' }}>
+
+        {/* ① المادة */}
+        <Section step="①" title="اختر المادة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+          {subjects.length === 0
+            ? <Empty text={t.noSubjects} subCol={subCol} />
+            : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {subjects.map(s => (
+                  <Chip key={s.id}
+                    label={`${s.icon ?? '📚'} ${s.name}${s.grade ? ` — الصف ${s.grade}` : ''}`}
+                    active={selSubject?.id === s.id} color={themeColor} subCol={subCol} borderCol={borderCol}
+                    onClick={() => { setSelSubject(s); setSelUnit(null); setSelLesson(null); setTool(''); setOutput(''); setGenId(''); setSavedText('') }}
+                  />
                 ))}
               </div>
-            </div>
-            <div style={{ height: 1, background: borderCol, marginBottom: 20 }} />
-            <button onClick={handleLogout} style={{ width: '100%', padding: 13, borderRadius: 14, border: '1.5px solid rgba(252,129,129,0.3)', background: 'rgba(252,129,129,0.08)', color: '#fc8181', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16 }}>
-              🚪 تسجيل الخروج
-            </button>
-            <div style={{ height: 1, background: borderCol, marginBottom: 20 }} />
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: textSub, marginBottom: 10 }}>🌓 وضع العرض</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[['dark', '🌙 داكن'], ['light', '☀️ فاتح'], ['system', '💻 حسب النظام']].map(([mode, label]) => (
-                  <button key={mode} onClick={() => saveTheme(themeColor, mode)}
-                    style={{ padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${themeMode === mode ? themeColor : borderCol}`, background: themeMode === mode ? themeColor + '15' : 'transparent', color: themeMode === mode ? themeColor : textSub, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'right', transition: 'all 0.2s' }}>
-                    {label} {themeMode === mode ? '✓' : ''}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {savingTheme && <p style={{ textAlign: 'center', color: '#43e97b', fontSize: 12, marginTop: 12 }}>💾 جارٍ الحفظ...</p>}
-          </div>
-        </>
-      )}
+            )}
+        </Section>
 
-      {/* Step 1: المادة */}
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>① اختر المادة</p>
-        {subjects.length === 0
-          ? <p style={{ fontSize: 12, color: textSub, padding: 12, borderRadius: 12, border: `1px solid ${borderCol}`, background: cardBg }}>لا توجد مواد متاحة — تواصل مع المدير</p>
-          : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {subjects.map(s => (
-              <button key={s.id} onClick={() => selectSubject(s)} style={{ padding: '10px 16px', borderRadius: 14, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'all 0.2s', background: selSubject?.id === s.id ? themeGradient : cardBg, color: selSubject?.id === s.id ? '#1a1a2e' : textSub, boxShadow: selSubject?.id === s.id ? `0 4px 14px ${themeColor}44` : 'none' }}>
-                {s.icon} {s.name}
-              </button>
-            ))}
-          </div>
-        }
-      </div>
+        {/* ② الوحدة */}
+        {selSubject && (
+          <Section step="②" title="اختر الوحدة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+            {units.length === 0
+              ? <Empty text="لا توجد وحدات لهذه المادة" subCol={subCol} />
+              : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  {units.map(u => (
+                    <Chip key={u.id} label={`${u.icon ?? '📖'} ${u.name}`}
+                      active={selUnit?.id === u.id} color={themeColor} subCol={subCol} borderCol={borderCol}
+                      onClick={() => { setSelUnit(u); setSelLesson(null); setOutput(''); setGenId(''); setSavedText('') }}
+                    />
+                  ))}
+                </div>
+              )}
+          </Section>
+        )}
 
-      {/* Step 2: الوحدة */}
-      {selSubject && units.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>② اختر الوحدة</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {units.map(u => (
-              <button key={u.id} onClick={() => selectUnit(u)} style={{ padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, transition: 'all 0.2s', background: selUnit?.id === u.id ? themeGradient : cardBg, color: selUnit?.id === u.id ? '#1a1a2e' : textSub }}>
-                {u.icon} {u.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+        {/* ③ الدرس */}
+        {selUnit && (
+          <Section step="③" title="اختر الدرس" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+            {lessons.length === 0
+              ? <Empty text="لا توجد دروس لهذه الوحدة" subCol={subCol} />
+              : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  {lessons.map(l => (
+                    <Chip key={l.id} label={`✏️ ${l.name}${l.file_urls?.length ? ' 📎' : ''}`}
+                      active={selLesson?.id === l.id} color={themeColor} subCol={subCol} borderCol={borderCol}
+                      onClick={() => { setSelLesson(l); setOutput(''); setGenId(''); setSavedText('') }}
+                    />
+                  ))}
+                </div>
+              )}
+          </Section>
+        )}
 
-      {/* Step 3: الدرس */}
-      {selUnit && lessons.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>③ اختر الدرس</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {lessons.map(l => (
-              <button key={l.id} onClick={() => { setSelLesson(l); setTool(null); setOutput(''); setError(''); setExamMode(null); setGenerationId(null) }}
-                style={{ padding: '12px 14px', borderRadius: 12, border: selLesson?.id === l.id ? `2px solid ${themeColor}` : `1.5px solid ${borderCol}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, textAlign: 'right', background: selLesson?.id === l.id ? themeColor + '15' : cardBg, color: selLesson?.id === l.id ? themeColor : textSub, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}>
-                <span style={{ color: textSub, fontSize: 11 }}>{l.order_num}.</span>
-                {l.name}
-                {l.file_urls?.length > 0 && <span style={{ fontSize: 11, color: '#4facfe', marginRight: 'auto' }}>📎</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Step 4: الأداة */}
-      {(selLesson || examMode) && (
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>④ ماذا تريد؟</p>
-          {selLesson && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-              {TOOLS.filter(t => t.id !== 'exam').map(t => (
-                <button key={t.id} onClick={() => { setTool(t.id); setExamMode(null); setSelExam(null); setOutput(''); setGenerationId(null) }}
-                  style={{ padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12, textAlign: 'right', border: tool === t.id ? `2px solid ${themeColor}` : '2px solid transparent', background: tool === t.id ? themeColor + '15' : cardBg, color: tool === t.id ? themeColor : textSub, transition: 'all 0.2s' }}>
-                  <div style={{ fontSize: 20, marginBottom: 3 }}>{t.icon}</div>
-                  <div style={{ fontWeight: 900 }}>{t.label}</div>
-                  <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{t.desc}</div>
+        {/* ④ الأداة */}
+        {selSubject && (
+          <Section step="④" title="ماذا تريد؟" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              {TOOLS.map(tool_ => (
+                <button key={tool_.id}
+                  onClick={() => { setTool(tool_.id); setOutput(''); setGenId(''); setSavedText('') }}
+                  style={{
+                    padding: '16px 12px', borderRadius: 14, textAlign: 'right',
+                    border: `2px solid ${tool === tool_.id ? themeColor : borderCol}`,
+                    background: tool === tool_.id ? `${themeColor}18` : cardBg,
+                    color: tool === tool_.id ? themeColor : textCol,
+                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+                    boxShadow: tool === tool_.id ? `0 4px 16px ${themeColor}30` : 'none',
+                  }}
+                >
+                  <div style={{ fontSize: 26, marginBottom: 8 }}>{tool_.icon}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{tool_.label}</div>
+                  <div style={{ fontSize: 12, color: tool === tool_.id ? `${themeColor}cc` : subCol, lineHeight: 1.4 }}>{tool_.desc}</div>
                 </button>
               ))}
             </div>
-          )}
-          {selSubject && exams.length > 0 && (
-            <div style={{ padding: 14, borderRadius: 14, border: `1px solid ${borderCol}`, background: cardBg }}>
-              <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>📝 الاختبارات</p>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {[['short', '📝 قصير'], ['final', '📊 نهائي']].map(([type, label]) => (
-                  <button key={type} onClick={() => { setExamMode(type as any); setTool('exam'); setSelLesson(null); setSelExam(null); setOutput(''); setGenerationId(null) }}
-                    style={{ flex: 1, padding: 9, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: examMode === type ? themeGradient : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', color: examMode === type ? '#1a1a2e' : textSub, transition: 'all 0.2s' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {examMode && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(examMode === 'short' ? shortExams : finalExams).map(e => (
-                    <button key={e.id} onClick={() => { selectExam(e); setOutput(''); setGenerationId(null) }}
-                      style={{ padding: '9px 12px', borderRadius: 10, textAlign: 'right', cursor: 'pointer', fontWeight: 700, fontSize: 12, border: selExam?.id === e.id ? `1px solid ${themeColor}` : `1px solid ${borderCol}`, background: selExam?.id === e.id ? themeColor + '15' : 'transparent', color: selExam?.id === e.id ? themeColor : textSub, transition: 'all 0.2s' }}>
-                      {e.name}
-                      {e.lesson_ids?.length > 0 && <span style={{ color: textSub, fontSize: 10, marginRight: 6 }}>({e.lesson_ids.length} درس)</span>}
+
+            {tool === 'exam' && (
+              <div style={{ marginTop: 20, padding: 16, borderRadius: 12, background: inputBg, border: `1px solid ${borderCol}` }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: subCol, marginBottom: 12 }}>نوع الاختبار:</div>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                  {(['short', 'final'] as const).map(type => (
+                    <button key={type} onClick={() => { setExamType(type); setSelExam(null) }}
+                      style={{
+                        padding: '8px 20px', borderRadius: 10,
+                        border: `2px solid ${examType === type ? themeColor : borderCol}`,
+                        background: examType === type ? `${themeColor}18` : 'transparent',
+                        color: examType === type ? themeColor : subCol,
+                        cursor: 'pointer', fontSize: 14, fontWeight: 700, fontFamily: 'inherit',
+                      }}
+                    >
+                      {type === 'short' ? t.exams.short : t.exams.final}
                     </button>
                   ))}
-                  {(examMode === 'short' ? shortExams : finalExams).length === 0 && (
-                    <p style={{ fontSize: 11, color: textSub }}>لا توجد اختبارات من هذا النوع</p>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: subCol, marginBottom: 10 }}>{t.exams.title}</div>
+                {exams.length === 0
+                  ? <Empty text={t.exams.noneOfType} subCol={subCol} />
+                  : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                      {exams.map(ex => (
+                        <Chip key={ex.id} label={ex.name}
+                          active={selExam?.id === ex.id} color={themeColor} subCol={subCol} borderCol={borderCol}
+                          onClick={() => setSelExam(ex)}
+                        />
+                      ))}
+                    </div>
                   )}
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* ⑤ تفاصيل */}
+        {canGenerate && (
+          <Section step="⑤" title="تفاصيل إضافية (اختياري)" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+            <textarea
+              value={details}
+              onChange={e => setDetails(e.target.value)}
+              placeholder={t.placeholders.default}
+              rows={3}
+              style={{
+                width: '100%', borderRadius: 12, padding: '14px 16px',
+                background: inputBg, border: `1.5px solid ${borderCol}`,
+                color: textCol, fontSize: 15, fontFamily: 'inherit',
+                resize: 'vertical', lineHeight: 1.7,
+              }}
+            />
+          </Section>
+        )}
+
+        {/* زر التوليد */}
+        {canGenerate && (
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <button onClick={handleGenerate} disabled={loading}
+              style={{
+                padding: '16px 48px', borderRadius: 16, border: 'none',
+                background: loading
+                  ? isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+                  : `linear-gradient(135deg,${themeColor},#ff4e50)`,
+                color: loading ? themeColor : '#1a1a2e',
+                fontSize: 18, fontWeight: 900,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', transition: 'all 0.3s', minWidth: 240,
+                boxShadow: loading ? 'none' : `0 8px 24px ${themeColor}44`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                margin: '0 auto',
+              }}
+            >
+              {loading ? (
+                <>
+                  <span style={{ width: 22, height: 22, flexShrink: 0, border: `3px solid ${themeColor}33`, borderTopColor: themeColor, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                  <span>جارٍ التوليد...</span>
+                </>
+              ) : `✨ توليد ${toolData?.label ?? ''}`}
+            </button>
+          </div>
+        )}
+
+        {/* خطأ */}
+        {error && (
+          <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 14, background: 'rgba(252,129,129,0.12)', border: '1.5px solid rgba(252,129,129,0.4)', color: '#fc8181', fontSize: 15, fontWeight: 600 }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* النتيجة */}
+        {output && (
+          <div className="result-fade" style={{
+            borderRadius: 18, padding: 28, background: cardBg,
+            border: `1.5px solid ${isEditing ? themeColor + '88' : borderCol}`,
+            marginBottom: 28, transition: 'border-color 0.3s',
+          }}>
+            {/* رأس النتيجة */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h3 style={{ fontSize: 17, fontWeight: 900, color: themeColor, margin: 0 }}>
+                  {toolData?.icon} {toolData?.label}
+                  {selLesson && ` — ${selLesson.name}`}
+                  {selExam   && ` — ${selExam.name}`}
+                </h3>
+                {isModified && !isEditing && (
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: `${themeColor}22`, color: themeColor, fontWeight: 700 }}>✏️ معدَّل</span>
+                )}
+                {editSaved && (
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(72,187,120,0.2)', color: '#68d391', fontWeight: 700 }}>✅ تم الحفظ</span>
+                )}
+              </div>
+
+              {!isEditing && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={startEditing}
+                    style={{ padding: '6px 14px', borderRadius: 10, border: `1.5px solid ${themeColor}55`, background: `${themeColor}15`, color: themeColor, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+                    ✏️ تعديل
+                  </button>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(displayText); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                    style={{ padding: '6px 14px', borderRadius: 10, border: `1.5px solid ${copied ? '#68d391' : borderCol}`, background: copied ? 'rgba(72,187,120,0.15)' : 'transparent', color: copied ? '#68d391' : subCol, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+                    {copied ? '✅ تم النسخ' : '📋 نسخ'}
+                  </button>
+                  <PrintButton content={displayText}
+                    title={tool === 'exam' ? (selExam?.name ?? '') : `${toolData?.label ?? ''} — ${selLesson?.name ?? ''}`}
+                    grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
+                  <WordExportButton content={displayText}
+                    title={tool === 'exam' ? (selExam?.name ?? '') : `${toolData?.label ?? ''} — ${selLesson?.name ?? ''}`}
+                    grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
+                  <PptxButton content={displayText}
+                    title={tool === 'exam' ? (selExam?.name ?? '') : `${toolData?.label ?? ''} — ${selLesson?.name ?? ''}`}
+                    grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
                 </div>
               )}
             </div>
-          )}
-        </div>
-      )}
 
-      {/* Step 5: تفاصيل إضافية */}
-      {((tool && tool !== 'exam' && selLesson) || (tool === 'exam' && selExam)) && (
-        <div style={{ marginBottom: 12 }}>
-          <p style={{ fontSize: 12, color: textSub, fontWeight: 700, marginBottom: 8 }}>⑤ تفاصيل إضافية (اختياري)</p>
-          <textarea value={userInput} onChange={e => setUserInput(e.target.value)}
-            placeholder={tool === 'explain' ? 'ركز على الأمثلة التطبيقية...' : tool === 'worksheet' ? '5 أنشطة متنوعة...' : tool === 'game' ? 'لعبة جماعية...' : tool === 'plan' ? 'درس 45 دقيقة...' : tool === 'pptx' ? 'عدد الشرائح المطلوب...' : '10 أسئلة الدرجة من 20...'}
-            rows={2}
-            style={{ width: '100%', padding: 12, borderRadius: 12, border: `1.5px solid ${borderCol}`, background: inputBg, color: textMain, fontSize: 13, resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.9, transition: 'all 0.3s' }} />
-        </div>
-      )}
+            {/* وضع التحرير */}
+            {isEditing ? (
+              <div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, padding: '10px 14px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: subCol, fontWeight: 700 }}>✏️ وضع التحرير</span>
+                  <div style={{ flex: 1 }} />
+                  <button onClick={restoreOriginal}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>
+                    🔄 استعادة الأصل
+                  </button>
+                  <button onClick={cancelEditing}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(252,129,129,0.4)', background: 'rgba(252,129,129,0.1)', color: '#fc8181', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>
+                    ❌ إلغاء
+                  </button>
+                  <button onClick={saveEdit} disabled={savingEdit}
+                    style={{ padding: '5px 16px', borderRadius: 8, border: 'none', background: savingEdit ? `${themeColor}44` : themeColor, color: '#1a1a2e', cursor: savingEdit ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 900, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {savingEdit ? (
+                      <><span style={{ width: 12, height: 12, border: '2px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الحفظ...</>
+                    ) : '💾 حفظ التعديل'}
+                  </button>
+                </div>
+                <textarea ref={textareaRef} value={editedText} onChange={e => setEditedText(e.target.value)} rows={20}
+                  style={{ width: '100%', borderRadius: 12, padding: '16px', background: inputBg, border: `2px solid ${themeColor}66`, color: textCol, fontSize: 15, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", resize: 'vertical', lineHeight: 1.9 }} />
+                <div style={{ textAlign: 'left', marginTop: 6, fontSize: 11, color: subCol }}>{editedText.length} حرف</div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 12 }}>
+                <MarkdownRenderer text={displayText} textCol={textCol} subCol={subCol} fontSize={15} />
+              </div>
+            )}
 
-      {error && <p style={{ color: '#fc8181', fontSize: 12, textAlign: 'center', marginBottom: 10, padding: 8, borderRadius: 10, background: 'rgba(252,129,129,0.08)' }}>⚠️ {error}</p>}
+            {!isEditing && (
+              <>
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${borderCol}` }}>
+                  <SpeechButton text={displayText} themeColor={themeColor} />
+                </div>
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${borderCol}` }}>
+                  <VisualCard content={displayText}
+                    title={tool === 'exam' ? (selExam?.name ?? '') : `${toolData?.label ?? ''} — ${selLesson?.name ?? ''}`}
+                    grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
+                </div>
+                {genId && user && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${borderCol}` }}>
+                    <FeedbackButtons generationId={genId} userId={user.id} themeColor={themeColor} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </main>
 
-      {/* زر التوليد */}
-      {((tool && tool !== 'exam' && selLesson) || (tool === 'exam' && selExam)) && (
-        <button onClick={handleGenerate} disabled={loading}
-          style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: loading ? (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)') : themeGradient, color: loading ? textSub : '#1a1a2e', fontWeight: 900, fontSize: 15, boxShadow: loading ? 'none' : `0 6px 18px ${themeColor}44`, transition: 'all 0.3s', marginBottom: 20, fontFamily: 'inherit' }}>
-          {loading ? '⏳ جارٍ الاستخراج...' : `✨ ${outputTitle}`}
-        </button>
-      )}
-
-      {/* النتيجة */}
-      {output && (
-        <div style={{ borderRadius: 16, border: `1.5px solid ${themeColor}33`, padding: 16, background: cardBg }}>
-
-          {/* أدوات النتيجة */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ color: themeColor, fontWeight: 700, fontSize: 13 }}>
-              {toolData?.icon ?? '📝'} {outputTitle}
-            </span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* نسخ */}
-              <button onClick={() => { navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                style={{ padding: '4px 10px', borderRadius: 8, border: `1px solid ${copied ? '#68d391' : themeColor + '44'}`, background: copied ? 'rgba(72,187,120,0.2)' : themeColor + '15', color: copied ? '#68d391' : themeColor, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
-                {copied ? '✅ تم' : '📋 نسخ'}
-              </button>
-              {/* طباعة */}
-              <PrintButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
-              {/* Word */}
-              <WordExportButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} tool={tool || ''} themeColor={themeColor} />
-              {/* PowerPoint */}
-              {(tool === 'explain' || tool === 'plan' || tool === 'pptx') && (
-                <PptxButton content={output} title={outputTitle} grade={selSubject?.grade} subject={selSubject?.name} themeColor={themeColor} />
-              )}
+      {/* ══ الإعدادات ══════════════════════════════════════════ */}
+      {showSettings && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}>
+          <div style={{ width: '90%', maxWidth: 400, borderRadius: 24, padding: 28, background: isDark ? '#1a1630' : '#ffffff', border: `1px solid ${borderCol}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, margin: 0 }}>{t.settings.title}</h2>
+              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
-          </div>
-
-          {/* المحتوى */}
-          <div style={{ fontSize: 13, color: textMain, whiteSpace: 'pre-wrap', maxHeight: 500, overflowY: 'auto', lineHeight: 2.1 }}>
-            {output}
-          </div>
-
-          {/* القراءة الصوتية */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
-            <SpeechButton text={output} themeColor={themeColor} />
-          </div>
-
-          {/* البطاقة المرئية */}
-          <div style={{ paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
-            <VisualCard
-              content={output}
-              title={outputTitle}
-              grade={selSubject?.grade}
-              subject={selSubject?.name}
-              themeColor={themeColor}
-              userId={user?.id}
-            />
-          </div>
-
-          {/* أزرار التقييم */}
-          {generationId && user && (
-            <div style={{ paddingTop: 12, borderTop: `1px solid ${borderCol}` }}>
-              <FeedbackButtons generationId={generationId} userId={user.id} themeColor={themeColor} />
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>{t.settings.themeColor}</p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {t.themeColors.map(th => (
+                  <button key={th.value} title={th.name} onClick={() => setThemeColor(th.value)}
+                    style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px ${isDark ? '#fff' : '#333'}, 0 0 0 6px ${th.value}` : 'none', transition: 'all 0.2s' }} />
+                ))}
+              </div>
             </div>
-          )}
+            <div style={{ marginBottom: 28 }}>
+              <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>{t.settings.displayMode}</p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(['dark', 'light', 'system'] as const).map(mode => (
+                  <button key={mode} onClick={() => setThemeMode(mode)}
+                    style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: `2px solid ${themeMode === mode ? themeColor : borderCol}`, background: themeMode === mode ? `${themeColor}18` : 'transparent', color: themeMode === mode ? themeColor : subCol, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+                    {{ dark: t.settings.modes.dark, light: t.settings.modes.light, system: t.settings.modes.system }[mode]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={saveSettings} disabled={savingSettings}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},#ff4e50)`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: savingSettings ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: savingSettings ? 0.7 : 1 }}>
+              {savingSettings ? c.saving : '💾 حفظ الإعدادات'}
+            </button>
+          </div>
         </div>
       )}
 
-      <p style={{ textAlign: 'center', color: isDark ? '#2d3748' : '#a0aec0', fontSize: 10, marginTop: 20 }}>
-        منصة مساعد اللغة العربية • ابتدائي · متوسط · ثانوي
-      </p>
+      <footer style={{ textAlign: 'center', padding: '24px', color: subCol, fontSize: 13, borderTop: `1px solid ${borderCol}` }}>
+        {c.footerStages}
+      </footer>
     </div>
   )
+}
+
+function HeaderBtn({ label, color, onClick, bordered, danger, isDark }: {
+  label: string; color: string; onClick: () => void
+  bordered?: boolean; danger?: boolean; isDark?: boolean
+}) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '8px 16px', borderRadius: 10, fontFamily: 'inherit',
+      fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+      border: danger ? '1.5px solid rgba(252,129,129,0.4)' : bordered ? `1.5px solid ${color}55` : `1.5px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'}`,
+      background: danger ? 'rgba(252,129,129,0.1)' : bordered ? `${color}15` : 'transparent',
+      color,
+    }}>
+      {label}
+    </button>
+  )
+}
+
+function Section({ step, title, children, cardBg, borderCol, textCol, themeColor }: {
+  step: string; title: string; children: React.ReactNode
+  cardBg: string; borderCol: string; textCol: string; themeColor: string
+}) {
+  return (
+    <div style={{ borderRadius: 18, padding: '20px 24px', background: cardBg, border: `1.5px solid ${borderCol}`, marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <span style={{ fontSize: 18, color: themeColor, fontWeight: 900 }}>{step}</span>
+        <h2 style={{ fontSize: 16, fontWeight: 800, color: textCol, margin: 0 }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Chip({ label, active, color, subCol, borderCol, onClick }: {
+  label: string; active: boolean; color: string
+  subCol: string; borderCol: string; onClick: () => void
+}) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '10px 18px', borderRadius: 12,
+      border: `2px solid ${active ? color : borderCol}`,
+      background: active ? `${color}22` : 'transparent',
+      color: active ? color : subCol,
+      cursor: 'pointer', fontSize: 14, fontWeight: 700,
+      fontFamily: 'inherit', transition: 'all 0.15s',
+      boxShadow: active ? `0 4px 14px ${color}33` : 'none',
+    }}>
+      {label}
+    </button>
+  )
+}
+
+function Empty({ text, subCol }: { text: string; subCol: string }) {
+  return <p style={{ color: subCol, fontSize: 14, margin: 0, padding: '8px 0' }}>{text}</p>
 }

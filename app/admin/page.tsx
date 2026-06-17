@@ -25,8 +25,8 @@ export default function AdminPage() {
   // نموذج المادة
   const [sName, setSName]   = useState('')
   const [sDesc, setSDesc]   = useState('')
-  const [sStage, setSStage] = useState('middle')
-  const [sGrade, setSGrade] = useState(ar.common.grades.middle[0])
+  const [sStage, setSStage] = useState<string>('middle')
+  const [sGrade, setSGrade] = useState<string>(ar.common.grades.middle[0])
   const [sIcon, setSIcon]   = useState('📚')
   const [editSubject, setEditSubject] = useState<any>(null)
 
@@ -57,7 +57,7 @@ export default function AdminPage() {
   const [msg, setMsg]         = useState('')
 
   useEffect(() => {
-    const stored = localStorage.getItem('user')
+    const stored = localStorage.getItem('mosaed_user')
     if (!stored) return router.push('/')
     const u = JSON.parse(stored)
     if (u.role !== 'admin') return router.push('/dashboard')
