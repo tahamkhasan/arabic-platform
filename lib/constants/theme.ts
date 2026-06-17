@@ -1,55 +1,82 @@
 // lib/constants/theme.ts
-// ألوان هوية منصة مِداد — مستمدة من الشعار
+// هوية منصة مِداد — ثيم موحد ثابت بدون وضع داكن/فاتح
 
 export const MIDAD_COLORS = {
-  // ── الخلفيات ──────────────────────────────────────────────
-  bgCream:      '#F5F0E8',   // خلفية الصفحات الخارجية
-  bgDark:       '#0E0A0A',   // خلفية التطبيق الداخلي
-  bgCard:       '#1A1210',   // بطاقات التطبيق
-  bgSurface:    '#241810',   // طبقة ثانية
+  // ── الخلفيات الموحدة ─────────────────────────────────────
+  bgBase:       '#F5F0E8',   // الخلفية العامة لكل الصفحات الداخلية
+  bgPage:       '#F7F2EA',   // خلفية الصفحات
+  bgSection:    '#FBF8F2',   // أقسام داخلية
+  bgCard:       '#FFFDF9',   // بطاقات
+  bgSurface:    '#F1E8DD',   // طبقة ثانية / شريط جانبي / هيدر
 
-  // ── الألوان الرئيسية من الشعار ────────────────────────────
-  deepRed:      '#7B1A1A',   // عنابي عميق
-  crimson:      '#C0392B',   // أحمر قرمزي
-  orangeRed:    '#CC4422',   // برتقالي أحمر
-  orange:       '#E07020',   // برتقالي
-  gold:         '#F4A420',   // ذهبي عنبري
-  amber:        '#F8C050',   // كهرماني فاتح
+  // ── ألوان هوية مِداد ─────────────────────────────────────
+  deepRed:      '#7B1A1A',
+  crimson:      '#C0392B',
+  orangeRed:    '#CC4422',
+  orange:       '#E07020',
+  gold:         '#F4A420',
+  amber:        '#F8C050',
 
-  // ── تدرج العلامة التجارية ─────────────────────────────────
+  // ── التدرجات ─────────────────────────────────────────────
   gradientMain: 'linear-gradient(135deg, #C0392B, #E07020)',
   gradientWarm: 'linear-gradient(135deg, #7B1A1A, #C0392B, #F4A420)',
   gradientGold: 'linear-gradient(135deg, #E07020, #F4A420)',
 
-  // ── النصوص ────────────────────────────────────────────────
-  textDark:     '#1A1221',   // نص داكن على الكريمي
-  textLight:    '#F5F0E8',   // نص فاتح على الداكن
-  textMuted:    '#6B5050',   // نص ثانوي على الكريمي
-  textMutedDark:'#94847A',   // نص ثانوي على الداكن
+  // ── النصوص ───────────────────────────────────────────────
+  textPrimary:  '#211C17',   // النص الرئيسي
+  textDark:     '#1A1221',   // العناوين الداكنة
+  textSecondary:'#6E6258',   // النص الثانوي
+  textMuted:    '#8A7B70',   // النص المساعد
+  textOnBrand:  '#FFF9F3',   // نص فوق الأزرار/الخلفيات الملونة
 
-  // ── زر الدعوة — أزرق متوهج (مميز عن بقية الألوان) ────────
+  // ── الأزرار والتمييز ─────────────────────────────────────
+  primary:      '#D96B2B',   // اللون الأساسي لزرار مِداد
+  primaryHover: '#BF5A20',
+  primarySoft:  '#F3E0D2',
+
   btnBlue:      '#2563EB',
   btnBlueDark:  '#1D4ED8',
-  btnGlow:      'rgba(37,99,235,0.45)',
+  btnGlow:      'rgba(37,99,235,0.18)',
   gradientBtn:  'linear-gradient(135deg, #2563EB, #1D4ED8)',
 
-  // ── الحدود ────────────────────────────────────────────────
-  borderLight:  'rgba(192,57,43,0.18)',
-  borderDark:   'rgba(255,255,255,0.08)',
-  borderGold:   'rgba(244,164,32,0.25)',
+  // ── الحدود والظلال ───────────────────────────────────────
+  borderLight:  '#E8DDCF',
+  borderWarm:   'rgba(192,57,43,0.16)',
+  borderGold:   'rgba(244,164,32,0.22)',
+  shadowSoft:   '0 8px 30px rgba(73, 44, 24, 0.08)',
+  shadowCard:   '0 10px 24px rgba(60, 35, 20, 0.06)',
 } as const
 
-// الثيم الداخلي للتطبيق (داكن + عنابي)
+// ثيم التطبيق الموحد — للمعلم والطالب والمدير
 export const APP_THEME = {
-  bg:         '#0E0A0A',
-  cardBg:     'rgba(255,255,255,0.06)',
-  textCol:    '#F5EDE8',
-  subCol:     '#94847A',
-  borderCol:  'rgba(192,57,43,0.15)',
-  inputBg:    'rgba(255,255,255,0.05)',
-  headerBg:   'rgba(14,10,10,0.97)',
-  primary:    '#E07020',
+  bg:         '#F5F0E8',
+  pageBg:     '#F7F2EA',
+  cardBg:     '#FFFDF9',
+  surfaceBg:  '#FBF8F2',
+  sidebarBg:  '#F1E8DD',
+  headerBg:   'rgba(245,240,232,0.94)',
+
+  textCol:    '#211C17',
+  titleCol:   '#1A1221',
+  subCol:     '#6E6258',
+  mutedCol:   '#8A7B70',
+
+  borderCol:  '#E8DDCF',
+  inputBg:    '#FFF9F3',
+  inputBorder:'#E5D7C8',
+
+  primary:    '#D96B2B',
+  primaryHover:'#BF5A20',
+  primarySoft:'#F3E0D2',
   gradient:   'linear-gradient(135deg,#C0392B,#E07020)',
+
   btnBlue:    'linear-gradient(135deg,#2563EB,#1D4ED8)',
-  btnGlow:    '0 8px 24px rgba(37,99,235,0.4)',
+  btnGlow:    '0 8px 24px rgba(37,99,235,0.18)',
+
+  success:    '#4D7C3A',
+  warning:    '#C9831C',
+  danger:     '#B6432E',
+
+  shadowSoft: '0 8px 30px rgba(73, 44, 24, 0.08)',
+  shadowCard: '0 10px 24px rgba(60, 35, 20, 0.06)',
 } as const
