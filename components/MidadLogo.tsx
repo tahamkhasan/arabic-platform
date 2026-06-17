@@ -1,15 +1,20 @@
 // components/MidadLogo.tsx
-// شعار منصة مِداد — حرف م + قطرة حبر مضيئة
 
 interface Props {
-  size?:    number
+  size?: number
   variant?: 'full' | 'icon' | 'text'
-  dark?:    boolean
+  dark?: boolean
 }
 
-export default function MidadLogo({ size = 40, variant = 'full', dark = true }: Props) {
+export default function MidadLogo({
+  size = 40,
+  variant = 'full',
+  dark = false,
+}: Props) {
   const iconSize = size
-  const textColor = dark ? '#f1f5f9' : '#0f172a'
+
+  const textPrimary = dark ? '#F8F4EE' : '#1F1720'
+  const textSecondary = dark ? 'rgba(248,244,238,0.78)' : 'rgba(111,91,91,0.82)'
 
   const Icon = () => (
     <svg
@@ -18,90 +23,140 @@ export default function MidadLogo({ size = 40, variant = 'full', dark = true }: 
       viewBox="0 0 100 100"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
     >
       <defs>
-        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor="#1d6fe8" />
-          <stop offset="100%" stopColor="#7c3aed" />
+        <linearGradient id="midad-bg" x1="8" y1="8" x2="92" y2="92" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#7B1A1A" />
+          <stop offset="55%" stopColor="#C0392B" />
+          <stop offset="100%" stopColor="#E07A24" />
         </linearGradient>
-        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor="#f9d423" />
-          <stop offset="100%" stopColor="#f97316" />
+
+        <linearGradient id="midad-drop" x1="62" y1="56" x2="82" y2="82" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#F4C95D" />
+          <stop offset="100%" stopColor="#E7A93B" />
         </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
+
+        <filter id="midad-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="8" stdDeviation="6" floodColor="rgba(79,19,19,0.18)" />
         </filter>
       </defs>
 
-      {/* الخلفية — مربع مستدير */}
-      <rect width="100" height="100" rx="22" fill="url(#grad1)" />
+      <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#midad-bg)" filter="url(#midad-shadow)" />
 
-      {/* حرف م — مبسّط هندسياً */}
-      <g transform="translate(50,50)" fill="none" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round">
-        {/* القوس العلوي لحرف م */}
-        <path d="M -24 8 C -24 -10 -8 -18 0 -18 C 8 -18 24 -10 24 8" />
-        {/* الساقان */}
-        <line x1="-24" y1="8" x2="-24" y2="20" />
-        <line x1="24"  y1="8" x2="24"  y2="20" />
-        {/* القاعدة */}
-        <line x1="-24" y1="20" x2="-14" y2="20" />
-        <line x1="14"  y1="20" x2="24"  y2="20" />
-      </g>
+      <path
+        d="M27 60V43C27 33.5 34.5 27 44 27C49.8 27 54.6 29.2 58 33.3C61.4 29.2 66.2 27 72 27C81.5 27 89 33.5 89 43V60"
+        stroke="#FFF9F2"
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
 
-      {/* قطرة الحبر المضيئة — أسفل يسار */}
-      <g filter="url(#glow)">
-        <circle cx="72" cy="72" r="10" fill="url(#grad2)" />
-        <circle cx="72" cy="60" r="4"  fill="#fbbf24" opacity="0.9" />
-      </g>
+      <path
+        d="M27 60H38"
+        stroke="#FFF9F2"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M78 60H89"
+        stroke="#FFF9F2"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
 
-      {/* نقاط صغيرة حول القطرة */}
-      <circle cx="84" cy="68" r="2.5" fill="#fbbf24" opacity="0.6" />
-      <circle cx="68" cy="83" r="2"   fill="#f97316" opacity="0.5" />
+      <path
+        d="M69.5 63.5C69.5 58.7 73 55 77 55C81 55 84.5 58.7 84.5 63.5C84.5 69.3 79.9 74 77 77.4C74.1 74 69.5 69.3 69.5 63.5Z"
+        fill="url(#midad-drop)"
+      />
+
+      <circle cx="73.5" cy="61.5" r="1.9" fill="#FFF3D6" opacity="0.95" />
+      <circle cx="83.5" cy="71" r="1.8" fill="#F6C768" opacity="0.72" />
+      <circle cx="69.5" cy="79.5" r="1.6" fill="#E7A93B" opacity="0.58" />
     </svg>
   )
 
-  if (variant === 'icon') return <Icon />
+  if (variant === 'icon') {
+    return <Icon />
+  }
 
-  if (variant === 'text') return (
-    <div style={{ display:'flex', flexDirection:'column', lineHeight:1 }}>
-      <span style={{
-        fontSize: size * 0.55, fontWeight: 900, color: textColor,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-        letterSpacing: 1,
-      }}>
-        مِداد
-      </span>
-      <span style={{
-        fontSize: size * 0.22, color: 'rgba(148,163,184,0.8)',
-        fontWeight: 600, marginTop: 2,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-      }}>
-        العربية بذكاء
-      </span>
-    </div>
-  )
-
-  // full — أيقونة + نص
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap: size * 0.28 }}>
-      <Icon />
-      <div style={{ display:'flex', flexDirection:'column', lineHeight:1 }}>
-        <span style={{
-          fontSize: size * 0.45, fontWeight: 900, color: textColor,
-          fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-          letterSpacing: 1,
-        }}>
+  if (variant === 'text') {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          lineHeight: 1,
+          direction: 'rtl',
+        }}
+      >
+        <span
+          style={{
+            fontSize: size * 0.56,
+            fontWeight: 900,
+            color: textPrimary,
+            fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+            letterSpacing: 0.2,
+          }}
+        >
           مِداد
         </span>
-        <span style={{
-          fontSize: size * 0.2, color: 'rgba(148,163,184,0.7)',
-          fontWeight: 600, marginTop: 3,
-          fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-        }}>
+        <span
+          style={{
+            fontSize: size * 0.22,
+            color: textSecondary,
+            fontWeight: 700,
+            marginTop: 5,
+            fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+          }}
+        >
+          العربية بذكاء
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: size * 0.26,
+        direction: 'rtl',
+      }}
+    >
+      <Icon />
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          lineHeight: 1,
+        }}
+      >
+        <span
+          style={{
+            fontSize: size * 0.46,
+            fontWeight: 900,
+            color: textPrimary,
+            fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+            letterSpacing: 0.2,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          مِداد
+        </span>
+
+        <span
+          style={{
+            fontSize: size * 0.2,
+            color: textSecondary,
+            fontWeight: 700,
+            marginTop: 4,
+            fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+            whiteSpace: 'nowrap',
+          }}
+        >
           العربية بذكاء
         </span>
       </div>

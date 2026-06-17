@@ -117,17 +117,7 @@ export default function LandingPage() {
       }}>
         {/* الشعار */}
         <div style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer' }} onClick={() => router.push('/')}>
-          <div style={{
-            width:42, height:42, borderRadius:12,
-            background: C.gradMain,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            fontSize:22, fontWeight:900, color:'#fff',
-            boxShadow:`0 4px 14px rgba(192,57,43,0.35)`,
-          }}>م</div>
-          <div>
-            <div style={{ fontSize:20, fontWeight:900, color: C.text, lineHeight:1 }}>مِداد</div>
-            <div style={{ fontSize:11, color: C.sub, fontWeight:600, lineHeight:1, marginTop:2 }}>العربية بذكاء</div>
-          </div>
+          <img src="/logo-midad.png" alt="مِداد" style={{ height:44, width:'auto', objectFit:'contain', filter:'drop-shadow(0 2px 8px rgba(192,57,43,0.25))' }} />
         </div>
 
         {/* الروابط */}
@@ -219,8 +209,8 @@ export default function LandingPage() {
           </div>
 
           {/* شعار عائم */}
-          <div style={{ marginTop:60, animation:'float 4s ease-in-out infinite' }}>
-            <div style={{ width:80, height:80, borderRadius:22, background: C.gradMain, display:'flex', alignItems:'center', justifyContent:'center', fontSize:40, fontWeight:900, color:'#fff', boxShadow:`0 8px 32px rgba(192,57,43,0.35)` }}>م</div>
+          <div style={{ marginTop:56, animation:'float 4s ease-in-out infinite' }}>
+            <img src="/logo-midad.png" alt="مِداد" style={{ height:90, width:'auto', objectFit:'contain', filter:'drop-shadow(0 8px 20px rgba(192,57,43,0.3))' }} />
           </div>
         </div>
       </section>
@@ -270,9 +260,9 @@ export default function LandingPage() {
           <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:40, position:'relative' }}>
             <div className="hide-mobile" style={{ position:'absolute', top:36, right:'17%', left:'17%', height:1, background:`linear-gradient(90deg,transparent,${C.orange}30,${C.orange}30,transparent)`, zIndex:0 }} />
             {[
-              { n:'1', icon:'📚', title:'اختر المادة والدرس',   desc:'يختار المعلّم المادة والدرس أو يرفع المحتوى العلمي مباشرة في المنصة.' },
-              { n:'2', icon:'✨', title:'توليد فوري بالذكاء',   desc:'تُنشئ مِداد شرحاً، نشاطاً، اختباراً، أو خطة درس بحسب الحاجة — في ثوانٍ.' },
-              { n:'3', icon:'🎯', title:'تفاعل ومتابعة',        desc:'يتفاعل المتعلّم مع المحتوى ويحصل على تدريب وتغذية راجعة أوضح وأسرع.' },
+              { n:'١', icon:'📚', title:'اختر المادة والدرس',   desc:'يختار المعلّم المادة والدرس أو يرفع المحتوى العلمي مباشرة في المنصة.' },
+              { n:'٢', icon:'✨', title:'توليد فوري بالذكاء',   desc:'تُنشئ مِداد شرحاً، نشاطاً، اختباراً، أو خطة درس بحسب الحاجة — في ثوانٍ.' },
+              { n:'٣', icon:'🎯', title:'تفاعل ومتابعة',        desc:'يتفاعل المتعلّم مع المحتوى ويحصل على تدريب وتغذية راجعة أوضح وأسرع.' },
             ].map((s,i) => (
               <div key={i} id={`step-${i}`} ref={setRef(`step-${i}`) as any}
                 style={{ textAlign:'center', position:'relative', zIndex:1, ...anim(`step-${i}`, i*0.15) }}>
@@ -299,15 +289,15 @@ export default function LandingPage() {
 
           <div className="grid-3" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:20 }}>
             {[
-              { icon:'👨‍🏫', title:'مُعلّم',          color: C.red,
+              { icon:'👨‍🏫', title:'المعلّم',          color: C.red,
                 img:'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=500&q=70&auto=format&fit=crop',
                 desc:'الذي يريد اختصار وقت التحضير ورفع جودة الشرح وإدارة طلابه في مكان واحد.',
                 points:['شرح وأوراق عمل فورية','إرسال مهام ومتابعة الإجابات','تحليلات أداء واضحة'] },
-              { icon:'👨‍🎓', title:'مُتعلّم',         color: C.orange,
+              { icon:'👨‍🎓', title:'المتعلّم',         color: C.orange,
                 img:'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=500&q=70&auto=format&fit=crop',
                 desc:'الذي يحتاج تدريباً أوضح ومساراً أبسط في تعلم العربية بطريقة تفاعلية.',
                 points:['شرح مخصص لدروسه','اختبارات تفاعلية وبطاقات حفظ','تتبع درجاته وتقدمه'] },
-              { icon:'🏫',  title:'مَدرسة', color: C.gold,
+              { icon:'🏫',  title:'الجهة التعليمية', color: C.gold,
                 img:'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=500&q=70&auto=format&fit=crop',
                 desc:'التي تبحث عن تنظيم المحتوى والاختبارات والمتابعة في بيئة واحدة متكاملة.',
                 points:['إدارة المعلمين والطلاب','تقارير أداء شاملة','محتوى موحّد ومنظم'] },
@@ -372,7 +362,9 @@ export default function LandingPage() {
         <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse at center, rgba(192,57,43,0.05) 0%, transparent 65%)' }} />
 
         <div style={{ position:'relative', zIndex:2, maxWidth:640, margin:'0 auto', ...anim('cta') }}>
-          <div style={{ width:90, height:90, borderRadius:24, background: C.gradMain, display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, fontWeight:900, color:'#fff', margin:'0 auto 28px', boxShadow:`0 12px 36px rgba(192,57,43,0.4)`, animation:'float 3.5s ease-in-out infinite' }}>م</div>
+          <div style={{ margin:'0 auto 28px', animation:'float 3.5s ease-in-out infinite' }}>
+            <img src="/logo-midad.png" alt="مِداد" style={{ height:100, width:'auto', objectFit:'contain', filter:'drop-shadow(0 10px 24px rgba(192,57,43,0.35))' }} />
+          </div>
 
           <h2 style={{ fontSize:42, fontWeight:900, color: C.text, marginBottom:16, lineHeight:1.3 }}>
             ابدأ رحلتك مع{' '}
@@ -403,7 +395,7 @@ export default function LandingPage() {
       <footer style={{ padding:'32px 48px', background: C.bg, borderTop:`1px solid ${C.border}` }}>
         <div className="footer-inner" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ width:34, height:34, borderRadius:9, background: C.gradMain, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:'#fff' }}>م</div>
+            <img src="/logo-midad.png" alt="مِداد" style={{ height:34, width:'auto', objectFit:'contain' }} />
             <div>
               <div style={{ fontSize:15, fontWeight:800, color: C.text }}>مِداد</div>
               <div style={{ fontSize:11, color: C.sub }}>العربية بذكاء</div>

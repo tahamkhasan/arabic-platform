@@ -462,7 +462,7 @@ export default function TeacherPage() {
             </div>
 
             {groups.length === 0
-              ? <EmptyState icon="👥" title="لا توجد مجموعات بعد" sub="أنشئ مجموعة وأضف طلابك إليها" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
+              ? <EmptyState icon="👥" title="لا توجد مجموعات بعد" sub="أنشئ مجموعة وأضف طلابك إليها" />
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
                   {groups.map(g => (
@@ -499,7 +499,7 @@ export default function TeacherPage() {
               {pendingReviews > 0 && <span style={{ fontSize: 13, marginRight: 10, background: '#f97316', color: '#fff', padding: '2px 10px', borderRadius: 8 }}>{pendingReviews} تحتاج مراجعة</span>}
             </h2>
             {submissions.length === 0
-              ? <EmptyState icon="📭" title="لا توجد إجابات بعد" sub="ستظهر إجابات الطلاب هنا" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
+              ? <EmptyState icon="📭" title="لا توجد إجابات بعد" sub="ستظهر إجابات الطلاب هنا" />
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {submissions.map(sub => {
@@ -680,7 +680,7 @@ export default function TeacherPage() {
           <div className="fade-in">
             <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>👤 الطلاب ({students.length})</h2>
             {students.length === 0
-              ? <EmptyState icon="👥" title="لا يوجد طلاب بعد" sub="سيظهر الطلاب هنا بعد موافقة المدير" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
+              ? <EmptyState icon="👥" title="لا يوجد طلاب بعد" sub="سيظهر الطلاب هنا بعد موافقة المدير" />
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
                   {students.map(s => (
@@ -712,7 +712,7 @@ export default function TeacherPage() {
                 <p style={{ margin: 0 }}>جارٍ تحميل التحليلات...</p>
               </div>
             ) : !stats ? (
-              <EmptyState icon="📊" title="لا توجد بيانات بعد" sub="أرسل مهاماً وصحّح إجابات لترى التحليلات" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
+              <EmptyState icon="📊" title="لا توجد بيانات بعد" sub="أرسل مهاماً وصحّح إجابات لترى التحليلات" />
             ) : (
               <>
                 {/* بطاقات الملخص */}
@@ -1033,9 +1033,8 @@ export default function TeacherPage() {
   )
 }
 
-function EmptyState({ icon, title, sub, cardBg, borderCol, textCol, subCol }: {
+function EmptyState({ icon, title, sub }: {
   icon: string; title: string; sub: string
-  cardBg: string; borderCol: string; textCol: string; subCol: string
 }) {
   return (
     <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FDFAF5', borderRadius: 18, border: '1.5px solid rgba(192,57,43,0.15)' }}>
