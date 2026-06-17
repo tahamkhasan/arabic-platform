@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 const T = {
@@ -22,7 +22,7 @@ interface User {
   created_at: string
 }
 
-type Tab = 'users' | 'subjects' | 'stats'
+type Tab = 'users' | 'subjects' | 'stats' | 'settings'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -34,6 +34,11 @@ export default function AdminPage() {
   const [filter,     setFilter]     = useState<'all'|'pending'|'student'|'teacher'>('all')
   const [searchQ,    setSearchQ]    = useState('')
   const [actionMsg,  setActionMsg]  = useState('')
+  const [logoUrl,     setLogoUrl]     = useState('/logo-midad.png')
+  const [logoFile,    setLogoFile]    = useState<File | null>(null)
+  const [uploading,   setUploading]   = useState(false)
+  const [uploadMsg,   setUploadMsg]   = useState('')
+  const logoInputRef = useRef<HTMLInputElement | null>(null)
 
   // ── التحقق من الجلسة ───────────────────────────────────────
   useEffect(() => {
@@ -50,6 +55,14 @@ export default function AdminPage() {
       setAdmin(u)
     } catch { router.replace('/') }
   }, [router])
+
+  // ── جلب شعار المنصة ──────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/platform-settings')
+      .then(r => r.json())
+      .then(d => { if (d.settings?.logo_url) setLogoUrl(d.settings.logo_url) })
+      .catch(() => {})
+  }, [])
 
   // ── جلب المستخدمين ─────────────────────────────────────────
   useEffect(() => {
@@ -103,6 +116,22 @@ export default function AdminPage() {
     } catch { setActionMsg('❌ حدث خطأ') }
   }
 
+  // ── رفع الشعار ────────────────────────────────────────────────
+  async function uploadLogo() {
+    if (!logoFile) return
+    setUploading(true); setUploadMsg('')
+    try {
+      const form = new FormData()
+      form.append('logo', logoFile)
+      const res  = await fetch('/api/platform-settings/logo', { method:'POST', body:form })
+      const data = await res.json()
+      if (res.ok) {
+        setLogoUrl(data.url); setUploadMsg('✅ تم رفع الشعار بنجاح!'); setLogoFile(null)
+      } else { setUploadMsg(`❌ ${data.error}`) }
+    } catch { setUploadMsg('❌ فشل الاتصال') }
+    finally { setUploading(false) }
+  }
+
   // ── تسجيل الخروج — يحذف المفاتيح الموحدة ──────────────────
   function handleLogout() {
     localStorage.removeItem('mosaed_user')
@@ -138,6 +167,7 @@ export default function AdminPage() {
     { id:'users',    icon:'👥', label:'المستخدمون', badge: pendingCount },
     { id:'subjects', icon:'📚', label:'المواد' },
     { id:'stats',    icon:'📊', label:'الإحصائيات' },
+    { id:'settings', icon:'⚙️', label:'إعدادات المنصة' },
   ]
 
   return (
@@ -323,6 +353,67 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+
+
+        {/* ── تبويب الإعدادات ── */}
+        {tab === 'settings' && (
+          <div className="fade-in">
+            <h2 style={{ fontSize:20,fontWeight:900,color:'#C0392B',marginBottom:24 }}>⚙️ إعدادات المنصة</h2>
+            <div style={{ background:T.cardBg,borderRadius:18,border:`1px solid ${T.borderCol}`,padding:28,maxWidth:520,boxShadow:T.shadow }}>
+              <h3 style={{ fontSize:16,fontWeight:800,color:T.textCol,marginBottom:20 }}>🖼️ شعار المنصة</h3>
+
+              {/* الشعار الحالي */}
+              <div style={{ textAlign:'center',marginBottom:22,padding:22,borderRadius:14,background:T.inputBg,border:`1px dashed ${T.borderCol}` }}>
+                <img src={logoUrl} alt="الشعار الحالي" style={{ maxHeight:80,maxWidth:'100%',objectFit:'contain' }} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
+                <p style={{ fontSize:12,color:T.subCol,marginTop:8 }}>الشعار الحالي</p>
+              </div>
+
+              {/* إدخال الملف */}
+              <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display:'none' }}
+                onChange={e => { setLogoFile(e.target.files?.[0]??null); setUploadMsg('') }} />
+
+              <button onClick={()=>logoInputRef.current?.click()}
+                style={{ width:'100%',padding:16,borderRadius:12,border:`2px dashed ${logoFile?'#C0392B':T.borderCol}`,background:logoFile?'rgba(192,57,43,0.06)':'transparent',color:logoFile?'#C0392B':T.subCol,cursor:'pointer',fontSize:14,fontWeight:700,fontFamily:'inherit',marginBottom:14 }}>
+                {logoFile ? `✅ ${logoFile.name}` : '📁 اختر صورة الشعار (PNG أو JPG)'}
+              </button>
+
+              {/* معاينة */}
+              {logoFile && (
+                <div style={{ marginBottom:16,padding:'12px 14px',borderRadius:10,background:'rgba(192,57,43,0.05)',border:`1px solid ${T.borderCol}`,fontSize:13,color:T.subCol }}>
+                  <div style={{ marginBottom:8 }}>📦 {(logoFile.size/1024).toFixed(1)} KB</div>
+                  <img src={URL.createObjectURL(logoFile)} alt="معاينة" style={{ maxHeight:60,maxWidth:'100%',objectFit:'contain',borderRadius:8 }} />
+                </div>
+              )}
+
+              {/* رسالة */}
+              {uploadMsg && (
+                <div style={{ padding:'10px 14px',borderRadius:10,marginBottom:14,fontSize:14,fontWeight:700,
+                  background:uploadMsg.startsWith('✅')?'rgba(5,150,105,0.08)':'rgba(192,57,43,0.08)',
+                  border:`1px solid ${uploadMsg.startsWith('✅')?'rgba(5,150,105,0.3)':'rgba(192,57,43,0.3)'}`,
+                  color:uploadMsg.startsWith('✅')?'#059669':'#C0392B' }}>
+                  {uploadMsg}
+                </div>
+              )}
+
+              {/* زر الرفع */}
+              <button onClick={uploadLogo} disabled={uploading||!logoFile}
+                style={{ width:'100%',padding:'13px',borderRadius:12,border:'none',
+                  background:logoFile?'linear-gradient(135deg,#2563EB,#1D4ED8)':'rgba(107,80,80,0.1)',
+                  color:logoFile?'#fff':'#6B5050',fontWeight:900,fontSize:15,
+                  cursor:logoFile?'pointer':'not-allowed',fontFamily:'inherit',
+                  boxShadow:logoFile?'0 5px 18px rgba(37,99,235,0.35)':'none',
+                  display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
+                {uploading
+                  ? <><span style={{ width:16,height:16,border:'2.5px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',display:'inline-block',animation:'spin 0.8s linear infinite' }} />جارٍ الرفع...</>
+                  : '🚀 رفع الشعار الجديد'}
+              </button>
+
+              <p style={{ fontSize:12,color:T.subCol,marginTop:12,textAlign:'center' }}>
+                PNG شفاف • أبعاد مثالية 300×150 • أقل من 2MB
+              </p>
+            </div>
+          </div>
+        )}
 
       {/* شريط التنقل */}
       <nav style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:T.headerBg,backdropFilter:'blur(20px)',borderTop:`1px solid ${T.borderCol}`,display:'flex',justifyContent:'space-around',padding:'8px 0 14px',boxShadow:'0 -2px 10px rgba(192,57,43,0.07)' }}>
