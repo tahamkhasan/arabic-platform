@@ -5,7 +5,7 @@ import { ar } from '@/lib/constants/ar'
 import MarkdownRenderer   from '@/components/MarkdownRenderer'
 import QuizPlayer         from '@/components/QuizPlayer'
 import FlashcardPlayer    from '@/components/FlashcardPlayer'
-import NotificationBell from '@/components/NotificationBell'
+
 const c = ar.common
 
 interface User       { id: string; name: string; role: string; user_type: string; theme_color?: string; theme_mode?: string; allowed_grades?: string[]; allowed_stages?: string[] }
@@ -63,7 +63,27 @@ export default function StudentPage() {
   const [lessons,    setLessons]    = useState<Lesson[]>([])
   const [selLesson,  setSelLesson]  = useState<Lesson | null>(null)
 
-  // ── أدوات التدرب ──────────────────────────────────────────────
+  // ── صور المواد الدراسية ────────────────────────────────────────
+function getSubjectImage(name: string): string {
+  const n = name.toLowerCase()
+  if (n.includes('عرب') || n.includes('لغة'))
+    return 'https://images.unsplash.com/photo-1589998059171-988d887df646?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('قرآن') || n.includes('تجويد') || n.includes('إسلام'))
+    return 'https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('رياض') || n.includes('حساب') || n.includes('math'))
+    return 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('علم') || n.includes('فيزياء') || n.includes('كيمياء') || n.includes('أحياء'))
+    return 'https://images.unsplash.com/photo-1532094349884-543559059c4a?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('تاريخ') || n.includes('جغراف') || n.includes('وطن'))
+    return 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('إنجليز') || n.includes('english'))
+    return 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=400&q=80&auto=format&fit=crop'
+  if (n.includes('حاسب') || n.includes('تقن') || n.includes('معلومات'))
+    return 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&q=80&auto=format&fit=crop'
+  return 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&q=80&auto=format&fit=crop'
+}
+
+// ── أدوات التدرب ──────────────────────────────────────────────
   const [practiceTool,    setPracticeTool]    = useState('')
   const [practiceOutput,  setPracticeOutput]  = useState('')
   const [practiceLoading, setPracticeLoading] = useState(false)
@@ -305,18 +325,6 @@ export default function StudentPage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setShowSettings(true)} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontFamily: 'inherit' }}>⚙️ الإعدادات</button>
-          {user && (
-  <NotificationBell
-    userId={user.id}
-    themeColor={themeColor}
-    textCol={textCol}
-    subCol={subCol}
-    cardBg={cardBg}
-    borderCol={borderCol}
-    inputBg={inputBg}
-    isDark={isDark}
-  />
-)}
           <button onClick={handleLogout} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: '1.5px solid rgba(252,129,129,0.4)', background: 'rgba(252,129,129,0.1)', color: '#fc8181', cursor: 'pointer', fontFamily: 'inherit' }}>🚪 خروج</button>
         </div>
       </header>
@@ -337,11 +345,31 @@ export default function StudentPage() {
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: textCol, marginBottom: 12 }}>📚 موادي ({subjects.length})</h3>
                 <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8 }}>
                   {subjects.map(s => (
-                    <button key={s.id} onClick={() => { setSelSubject(s); setSelUnit(null); setSelLesson(null); setTab('lessons') }}
-                      style={{ flexShrink: 0, padding: '14px 18px', borderRadius: 14, border: `1.5px solid ${themeColor}44`, background: `${themeColor}12`, cursor: 'pointer', textAlign: 'right', fontFamily: 'inherit', minWidth: 140 }}>
-                      <div style={{ fontSize: 26, marginBottom: 6 }}>{s.icon ?? '📚'}</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: textCol }}>{s.name}</div>
-                      {s.grade && <div style={{ fontSize: 12, color: themeColor, marginTop: 4 }}>الصف {s.grade}</div>}
+                    <button key={s.id}
+                      onClick={() => { setSelSubject(s); setSelUnit(null); setSelLesson(null); setTab('lessons') }}
+                      style={{
+                        flexShrink: 0, width: 160, borderRadius: 16,
+                        border: `1.5px solid ${themeColor}44`,
+                        background: cardBg, cursor: 'pointer',
+                        textAlign: 'right', fontFamily: 'inherit',
+                        overflow: 'hidden', padding: 0,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                        transition: 'transform 0.2s',
+                      }}>
+                      <div style={{ height: 90, overflow: 'hidden', position: 'relative' }}>
+                        <img
+                          src={getSubjectImage(s.name)}
+                          alt={s.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.6))` }} />
+                        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 22 }}>{s.icon ?? '📚'}</div>
+                      </div>
+                      <div style={{ padding: '10px 12px' }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: textCol }}>{s.name}</div>
+                        {s.grade && <div style={{ fontSize: 11, color: themeColor, marginTop: 3 }}>الصف {s.grade}</div>}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -595,16 +623,6 @@ export default function StudentPage() {
 
       {/* شريط التنقل */}
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: headerBg, backdropFilter: 'blur(20px)', borderTop: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-around', padding: '8px 0 14px' }}>
-        <NotificationBell
-          userId={user.id}
-          themeColor={themeColor}
-          textCol={textCol}
-          subCol={subCol}
-          cardBg={cardBg}
-          borderCol={borderCol}
-          inputBg={inputBg}
-          isDark={isDark}
-        />
         {TABS.map(tb => (
           <button key={tb.id} onClick={() => setTab(tb.id)}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 10, color: tab === tb.id ? themeColor : subCol, position: 'relative', transition: 'all 0.2s' }}>

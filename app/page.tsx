@@ -1,284 +1,298 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ar } from '@/lib/constants/ar'
 
-const FLOATING_WORD_LAYOUT = [
-  { size: 36, opacity: 0.25, top: '8%',  left: '5%'  },
-  { size: 28, opacity: 0.22, top: '15%', left: '70%' },
-  { size: 42, opacity: 0.28, top: '25%', left: '85%' },
-  { size: 30, opacity: 0.20, top: '40%', left: '3%'  },
-  { size: 38, opacity: 0.26, top: '55%', left: '75%' },
-  { size: 26, opacity: 0.20, top: '65%', left: '15%' },
-  { size: 32, opacity: 0.23, top: '75%', left: '60%' },
-  { size: 40, opacity: 0.27, top: '82%', left: '30%' },
-  { size: 30, opacity: 0.21, top: '10%', left: '40%' },
-  { size: 34, opacity: 0.24, top: '45%', left: '88%' },
-  { size: 48, opacity: 0.30, top: '30%', left: '50%' },
-  { size: 52, opacity: 0.32, top: '70%', left: '45%' },
-]
-
-const FLOATING_WORDS = ar.login.floatingWords.map((text, i) => ({
-  text,
-  ...FLOATING_WORD_LAYOUT[i],
-}))
+const IMAGES = {
+  loginBg:    'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=1920&q=80&auto=format&fit=crop',
+  calligraphy:'https://images.unsplash.com/photo-1594392175511-30eca83d51c8?w=800&q=80&auto=format&fit=crop',
+  books:      'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800&q=80&auto=format&fit=crop',
+}
 
 export default function LoginPage() {
   const router = useRouter()
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [showPw,   setShowPw]   = useState(false)
+  const [showPass, setShowPass] = useState(false)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
-  const [mounted,  setMounted]  = useState(false)
+  const [isRegister, setIsRegister] = useState(false)
+  const [name,     setName]     = useState('')
 
-  useEffect(() => { setMounted(true) }, [])
-
-  async function handleLogin() {
-    if (!email || !password) return setError(ar.login.errors.missingCredentials)
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
     setLoading(true); setError('')
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ action: 'login', email, password }),
       })
       const data = await res.json()
-      if (!res.ok) return setError(data.error || ar.login.errors.loginFailed)
-
-      // ✅ التصحيح — نفس المفاتيح التي يقرأها الداشبورد
+      if (!res.ok) { setError(data.error || 'بيانات غير صحيحة'); return }
       localStorage.setItem('mosaed_user',    JSON.stringify(data.user))
       localStorage.setItem('mosaed_session', JSON.stringify(data.session))
-
-      if (data.user?.role === 'admin')              router.push('/admin')
+      if (data.user?.role === 'admin')         router.push('/admin')
       else if (data.user?.user_type === 'student') router.push('/student')
-      else                                         router.push('/dashboard')
-    } catch { setError(ar.login.errors.tryAgain) }
+      else                                          router.push('/dashboard')
+    } catch { setError('تعذّر الاتصال بالخادم') }
+    finally  { setLoading(false) }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', email, password, name }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'فشل التسجيل'); return }
+      setIsRegister(false)
+      setError('✅ تم التسجيل! انتظر موافقة المدير للدخول.')
+    } catch { setError('تعذّر الاتصال بالخادم') }
     finally  { setLoading(false) }
   }
 
   return (
     <div dir="rtl" style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px', position: 'relative', overflow: 'hidden',
-      background: 'linear-gradient(135deg,#0a0a1a,#0d1117,#0f1923)',
+      minHeight: '100vh', display: 'flex',
       fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
     }}>
-
-      {/* خلفية متحركة */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-
-        {/* دوائر متوهجة */}
-        {mounted && [
-          { w: 700, h: 700, top: '-20%', right: '-15%', c1: '#f9d42340', c2: '#ff4e5015' },
-          { w: 500, h: 500, bottom: '-15%', left: '-10%', c1: '#4facfe30', c2: '#00f2fe10' },
-          { w: 350, h: 350, top: '35%', left: '25%', c1: '#43e97b20', c2: '#38f9d710' },
-        ].map((c, i) => (
-          <div key={i} style={{
-            position: 'absolute', width: c.w, height: c.h,
-            top: c.top, bottom: (c as { bottom?: string }).bottom,
-            right: (c as { right?: string }).right, left: c.left,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${c.c1}, ${c.c2}, transparent)`,
-            animation: `pulse ${3 + i}s ease-in-out infinite alternate`,
-          }} />
-        ))}
-
-        {/* كلمات عائمة */}
-        {mounted && FLOATING_WORDS.map((word, i) => (
-          <div key={i} style={{
-            position: 'absolute', left: word.left, top: word.top,
-            color: `rgba(249,212,35,${word.opacity})`,
-            fontSize: word.size, fontWeight: 900,
-            animation: `float ${5 + (i % 3)}s ease-in-out infinite alternate`,
-            animationDelay: `${i * 0.4}s`,
-            userSelect: 'none',
-            textShadow: `0 0 20px rgba(249,212,35,${word.opacity * 0.5})`,
-            letterSpacing: '2px',
-          }}>{word.text}</div>
-        ))}
-
-        {/* خطوط ديكورية */}
-        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.05 }}>
-          {mounted && Array.from({ length: 6 }).map((_, i) => (
-            <line key={i}
-              x1={`${i * 20}%`} y1="0"
-              x2={`${(i * 20 + 40) % 100}%`} y2="100%"
-              stroke="#f9d423" strokeWidth="1" />
-          ))}
-        </svg>
-      </div>
-
-      {/* CSS */}
       <style>{`
-        @keyframes float {
-          from { transform: translateY(0px) rotate(-3deg) scale(1); }
-          to   { transform: translateY(-25px) rotate(3deg) scale(1.05); }
-        }
-        @keyframes pulse {
-          from { transform: scale(1); opacity: 0.6; }
-          to   { transform: scale(1.15); opacity: 1; }
-        }
-        @keyframes slideUp {
-          from { transform: translateY(40px); opacity: 0; }
-          to   { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes shimmer {
-          0%   { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        .card-animate        { animation: slideUp 0.6s ease forwards; }
-        .input-field         { transition: all 0.3s; }
-        .input-field:focus   { border-color: rgba(249,212,35,0.6) !important; box-shadow: 0 0 0 3px rgba(249,212,35,0.12) !important; }
-        .btn-main:hover      { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(249,212,35,0.45) !important; }
-        .btn-main:active     { transform: translateY(0px); }
-        .btn-secondary:hover { border-color: rgba(255,255,255,0.25) !important; color: #e2e8f0 !important; background: rgba(255,255,255,0.06) !important; }
-        .btn-forgot:hover    { color: #f9d423 !important; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes float  { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes spin   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        input:focus { outline: none; }
+        .fade-up { animation: fadeUp 0.6s ease forwards; }
       `}</style>
 
-      {/* البطاقة الرئيسية */}
-      <div className="card-animate" style={{
-        width: '100%', maxWidth: 400, position: 'relative', zIndex: 10,
-        background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(24px)',
-        borderRadius: 28, border: '1px solid rgba(255,255,255,0.1)',
-        padding: '40px 32px',
-        boxShadow: '0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
-      }}>
+      {/* ══ الجانب الأيسر — الصورة ══════════════════════════════ */}
+      <div style={{
+        flex: 1, display: 'none',
+        position: 'relative', overflow: 'hidden',
+      }}
+        className="left-panel"
+      >
+        {/* خلفية الصورة */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: `url(${IMAGES.loginBg})`,
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          filter: 'brightness(0.4)',
+        }} />
 
-        {/* شعار */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        {/* طبقة تدرج */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(135deg,rgba(79,172,254,0.3),rgba(168,139,250,0.3))',
+        }} />
+
+        {/* المحتوى */}
+        <div style={{
+          position: 'relative', zIndex: 2,
+          height: '100%', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '40px', color: '#fff', textAlign: 'center',
+        }}>
+          {/* أيقونة عائمة */}
           <div style={{
-            width: 80, height: 80, borderRadius: '50%', margin: '0 auto 16px',
-            background: 'linear-gradient(135deg,#f9d423,#ff4e50)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 36, boxShadow: '0 8px 30px rgba(249,212,35,0.5)',
-            animation: 'pulse 2.5s ease-in-out infinite alternate',
+            fontSize: 80, marginBottom: 24,
+            animation: 'float 3s ease-in-out infinite',
           }}>🌙</div>
 
           <h1 style={{
-            fontSize: 22, fontWeight: 900, margin: '0 0 6px',
-            background: 'linear-gradient(90deg,#f9d423,#ff4e50,#f9d423)',
-            backgroundSize: '200% auto',
+            fontSize: 36, fontWeight: 900, marginBottom: 16,
+            background: 'linear-gradient(135deg,#f9d423,#ff4e50)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            animation: 'shimmer 3s linear infinite',
-          }}>{ar.login.title}</h1>
+          }}>
+            منصة مساعد اللغة العربية
+          </h1>
+          <p style={{ fontSize: 18, opacity: 0.9, lineHeight: 1.8, maxWidth: 400, marginBottom: 40 }}>
+            منصة تعليمية متكاملة مدعومة بالذكاء الاصطناعي لتعلم اللغة العربية
+          </p>
 
-          <p style={{ color: '#4a5568', fontSize: 12, margin: 0 }}>{ar.login.subtitle}</p>
+          {/* ميزات */}
+          {[
+            { icon: '🎯', text: 'اختبارات تفاعلية ذكية' },
+            { icon: '🃏', text: 'بطاقات حفظ حسب نوع الدرس' },
+            { icon: '📝', text: 'مهام مع تصحيح فوري بالذكاء الاصطناعي' },
+            { icon: '📊', text: 'تحليلات أداء متقدمة' },
+          ].map((f, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              marginBottom: 14, fontSize: 16,
+              animation: `fadeUp 0.6s ease ${i * 0.15}s forwards`,
+              opacity: 0,
+            }}>
+              <span style={{ fontSize: 24 }}>{f.icon}</span>
+              <span style={{ opacity: 0.9 }}>{f.text}</span>
+            </div>
+          ))}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 0' }}>
-            <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,transparent,rgba(249,212,35,0.4))' }} />
-            <span style={{ color: '#f9d423', fontSize: 14 }}>✦</span>
-            <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(249,212,35,0.4),transparent)' }} />
+          {/* صورة الكتب */}
+          <div style={{
+            marginTop: 40, width: 200, height: 140, borderRadius: 16,
+            overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          }}>
+            <img src={IMAGES.books} alt="كتب" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         </div>
+      </div>
 
-        {/* النموذج */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ══ الجانب الأيمن — نموذج الدخول ═══════════════════════ */}
+      <div style={{
+        width: '100%', maxWidth: 480,
+        background: '#0d0b1e',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '40px 32px',
+        position: 'relative', overflow: 'hidden',
+      }}>
 
-          {/* البريد */}
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>📧</span>
-            <input
-              type="email" value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder={ar.login.emailPlaceholder}
-              className="input-field"
-              style={{ width: '100%', padding: '14px 44px 14px 14px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-            />
+        {/* نقاط زخرفية */}
+        <div style={{ position: 'absolute', top: 40, right: 40, width: 120, height: 120, borderRadius: '50%', background: 'rgba(79,172,254,0.08)', filter: 'blur(40px)' }} />
+        <div style={{ position: 'absolute', bottom: 40, left: 40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(168,139,250,0.08)', filter: 'blur(50px)' }} />
+
+        <div style={{ width: '100%', maxWidth: 380, position: 'relative', zIndex: 2 }} className="fade-up">
+
+          {/* الشعار */}
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: 20,
+              background: 'linear-gradient(135deg,#4facfe,#a78bfa)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 36, margin: '0 auto 16px',
+              boxShadow: '0 8px 24px rgba(79,172,254,0.3)',
+            }}>🌙</div>
+            <h2 style={{ fontSize: 22, fontWeight: 900, color: '#f1f5f9', marginBottom: 6 }}>
+              منصة مساعد اللغة العربية
+            </h2>
+            <p style={{ fontSize: 14, color: '#64748b' }}>
+              {isRegister ? 'إنشاء حساب جديد' : 'مدعوم بالذكاء الاصطناعي 🤖'}
+            </p>
           </div>
 
-          {/* كلمة المرور */}
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>🔑</span>
-            <input
-              type={showPw ? 'text' : 'password'} value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder={ar.login.passwordPlaceholder}
-              className="input-field"
-              style={{ width: '100%', padding: '14px 44px 14px 44px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.07)', color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-            />
-            <button
-              onClick={() => setShowPw(p => !p)}
-              style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }}
-            >
-              {showPw ? '🙈' : '👁️'}
-            </button>
-          </div>
-
-          {/* نسيت كلمة المرور */}
-          <div style={{ textAlign: 'left' }}>
-            <button
-              onClick={() => router.push('/forgot-password')}
-              className="btn-forgot"
-              style={{ background: 'none', border: 'none', color: '#4a5568', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.2s' }}
-            >
-              {ar.login.forgotPassword}
-            </button>
-          </div>
-
-          {/* رسالة الخطأ */}
+          {/* رسالة الخطأ / النجاح */}
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(252,129,129,0.1)', border: '1px solid rgba(252,129,129,0.3)', color: '#fc8181', fontSize: 13, textAlign: 'center', animation: 'slideUp 0.3s ease' }}>
-              ⚠️ {error}
+            <div style={{
+              padding: '12px 16px', borderRadius: 12, marginBottom: 20, fontSize: 14,
+              background: error.startsWith('✅') ? 'rgba(67,233,123,0.12)' : 'rgba(252,129,129,0.12)',
+              border: `1px solid ${error.startsWith('✅') ? 'rgba(67,233,123,0.3)' : 'rgba(252,129,129,0.3)'}`,
+              color: error.startsWith('✅') ? '#43e97b' : '#fc8181',
+            }}>
+              {error}
             </div>
           )}
 
-          {/* زر الدخول */}
-          <button
-            onClick={handleLogin}
-            disabled={loading}
-            className="btn-main"
-            style={{
-              width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              background: loading ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg,#f9d423,#ff4e50)',
-              color: loading ? '#4a5568' : '#1a1a2e', fontWeight: 900, fontSize: 16,
-              fontFamily: 'inherit', transition: 'all 0.3s',
-              boxShadow: loading ? 'none' : '0 6px 20px rgba(249,212,35,0.35)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            {loading ? (
-              <>
-                <span style={{ width: 18, height: 18, border: '2px solid #4a5568', borderTopColor: '#718096', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                {ar.login.loggingIn}
-              </>
-            ) : ar.login.loginButton}
-          </button>
+          {/* النموذج */}
+          <form onSubmit={isRegister ? handleRegister : handleLogin}
+            style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* فاصل */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-            <span style={{ color: '#4a5568', fontSize: 12 }}>{ar.common.or}</span>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+            {isRegister && (
+              <div>
+                <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                  👤 الاسم الكامل
+                </label>
+                <input value={name} onChange={e => setName(e.target.value)}
+                  placeholder="أدخل اسمك الكامل"
+                  required
+                  style={{
+                    width: '100%', padding: '13px 16px', borderRadius: 12,
+                    border: '1.5px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.06)', color: '#f1f5f9',
+                    fontSize: 15, fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+            )}
+
+            <div>
+              <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                📧 البريد الإلكتروني
+              </label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="example@email.com"
+                required
+                style={{
+                  width: '100%', padding: '13px 16px', borderRadius: 12,
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.06)', color: '#f1f5f9',
+                  fontSize: 15, fontFamily: 'inherit', direction: 'ltr', textAlign: 'right',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 13, color: '#94a3b8', display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                🔑 كلمة المرور
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  style={{
+                    width: '100%', padding: '13px 48px 13px 16px', borderRadius: 12,
+                    border: '1.5px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.06)', color: '#f1f5f9',
+                    fontSize: 15, fontFamily: 'inherit',
+                  }}
+                />
+                <button type="button" onClick={() => setShowPass(s => !s)}
+                  style={{
+                    position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', fontSize: 16,
+                  }}>
+                  {showPass ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            {/* زر الدخول */}
+            <button type="submit" disabled={loading}
+              style={{
+                padding: '14px', borderRadius: 14, border: 'none', marginTop: 6,
+                background: loading ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg,#4facfe,#a78bfa)',
+                color: loading ? '#4facfe' : '#fff',
+                fontSize: 16, fontWeight: 900, cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                boxShadow: loading ? 'none' : '0 8px 20px rgba(79,172,254,0.3)',
+                transition: 'all 0.2s',
+              }}>
+              {loading
+                ? <><span style={{ width: 18, height: 18, border: '3px solid rgba(79,172,254,0.3)', borderTopColor: '#4facfe', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ التحقق...</>
+                : isRegister ? '✨ إنشاء الحساب' : 'دخول ←'
+              }
+            </button>
+          </form>
+
+          {/* رابط التبديل */}
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <button onClick={() => { setIsRegister(r => !r); setError('') }}
+              style={{ background: 'none', border: 'none', color: '#4facfe', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit', fontWeight: 600 }}>
+              {isRegister ? '← العودة لتسجيل الدخول' : 'ليس لدي حساب — التسجيل الجديد ✨'}
+            </button>
           </div>
 
-          {/* زر التسجيل */}
-          <button
-            onClick={() => router.push('/register')}
-            className="btn-secondary"
-            style={{
-              width: '100%', padding: '13px', borderRadius: 14,
-              border: '1.5px solid rgba(255,255,255,0.1)',
-              background: 'rgba(255,255,255,0.03)', color: '#718096',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer',
-              fontFamily: 'inherit', transition: 'all 0.3s',
-            }}
-          >
-            {ar.login.registerButton}
-          </button>
+          {/* الذيل */}
+          <p style={{ textAlign: 'center', fontSize: 12, color: '#334155', marginTop: 32 }}>
+            منصة مساعد اللغة العربية • الكويت 🇰🇼
+          </p>
         </div>
-
-        <p style={{ textAlign: 'center', color: '#2d3748', fontSize: 11, marginTop: 24, marginBottom: 0 }}>
-          {ar.common.footerKuwait}
-        </p>
       </div>
+
+      {/* CSS للشاشات الكبيرة */}
+      <style>{`
+        @media (min-width: 768px) {
+          .left-panel { display: flex !important; }
+        }
+      `}</style>
     </div>
   )
 }
