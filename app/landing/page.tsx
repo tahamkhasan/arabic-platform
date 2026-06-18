@@ -392,8 +392,6 @@ export default function LandingPage() {
               ابدأ رحلتك مع مِداد
             </h2>
             <p style={{ color:C.sub, fontSize:17, fontFamily:CALIBRI, lineHeight:1.95, maxWidth:640, margin:'0 auto 30px' }}>
-              منصة عربية تعليمية أكثر هدوءاً ووضوحاً، تساعد على تنظيم المحتوى ودعم التعلم
-              وتقديم تجربة أقرب لاحتياج المعلم والمتعلم.
             </p>
             <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
               <button onClick={() => router.push('/login')} className="btn btn-blue"
