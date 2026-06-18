@@ -364,7 +364,7 @@ export default function LandingPage() {
             </h2>
             <p style={{ color:B.sub, fontSize:17, fontFamily:CALIBRI, lineHeight:1.95, maxWidth:600, margin:'0 auto 32px' }}>
               سواء كنت معلماً تبحث عن شرح أقوى، أو متعلماً يريد تدريباً أوضح، تمنحك مِداد
-              بيئة عربية ذكية تنظّم التعلم وتدعم التقدم خطوة بخطوة.
+              بيئة عربية ذكية تنظّم التعلم وتواكب التطور وتراقب التقدم خطوة بخطوة.
             </p>
             <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
               <button onClick={() => router.push('/login')} className="btn btn-blue"
