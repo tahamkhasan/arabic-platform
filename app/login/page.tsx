@@ -19,6 +19,8 @@ const C = {
   shadowCard:  '0 8px 32px rgba(192,57,43,0.10)',
 }
 
+const CALIBRI = "'Calibri','Trebuchet MS','Gill Sans MT',Tahoma,sans-serif"
+
 export default function LoginPage() {
   const router = useRouter()
   const [email,       setEmail]       = useState('')
@@ -143,13 +145,13 @@ export default function LoginPage() {
 
         <div style={{ position:'relative', zIndex:2, maxWidth:540 }}>
 
-          {/* الشعار — كبير ومركزي */}
-          <div className="r1" style={{ marginBottom:40, animation:'float 4s ease-in-out infinite' }}>
+          {/* الشعار — نفس landing */}
+          <div className="r1" style={{ marginBottom:36, animation:'float 4s ease-in-out infinite' }}>
             <img
               src={logoUrl}
               alt="مِداد"
               style={{
-                height: 80, width: 'auto', objectFit: 'contain',
+                height: 70, width: 'auto', objectFit: 'contain',
                 filter: 'drop-shadow(0 4px 14px rgba(192,57,43,0.22))',
               }}
               onError={e => { (e.target as HTMLImageElement).src = '/logo-midad.png' }}
@@ -159,6 +161,7 @@ export default function LoginPage() {
           {/* العنوان */}
           <h1 className="r2" style={{
             fontSize: 'clamp(36px,4.5vw,58px)', fontWeight: 900,
+            fontFamily: CALIBRI,
             lineHeight: 1.22, color: C.text, marginBottom: 16,
           }}>
             تعلّم، علِّم،<br />
@@ -173,7 +176,7 @@ export default function LoginPage() {
 
           {/* الوصف */}
           <p className="r3" style={{
-            fontSize: 16, color: C.sub, lineHeight: 1.85,
+            fontSize: 16, color: C.sub, lineHeight: 1.85, fontFamily: CALIBRI,
             marginBottom: 18, maxWidth: 460,
           }}>
             مخصص للمعلّم والمتعلّم في اللغة العربية

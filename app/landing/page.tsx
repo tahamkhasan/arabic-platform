@@ -243,9 +243,6 @@ export default function LandingPage() {
                 <div style={{ display:'flex', justifyContent:'center', marginBottom:16 }}>
                   <Logo h={56} />
                 </div>
-                <p style={{ color:C.sub, fontSize:14, lineHeight:1.9, maxWidth:280, margin:'0 auto' }}>
-                  هوية هادئة ودافئة تعبّر عن العربية، وتمنح المنصة حضوراً تعليمياً أكثر نضجاً وثقة.
-                </p>
               </div>
 
               {/* الأدوار */}
