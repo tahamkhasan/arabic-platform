@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import PublicHeader from '@/components/PublicHeader'
 
 const B = {
   deep:'#780F1E', red:'#961E2D', crimson:'#C32D2D',
@@ -76,7 +77,7 @@ export default function LoginPage() {
   )
 
   return (
-    <div dir="rtl" style={{ minHeight:'100vh', display:'flex', fontFamily:CAIRO, background:B.bg }}>
+    <div dir="rtl" style={{ minHeight:'100vh', display:'flex', flexDirection:'column', fontFamily:CAIRO, background:B.bg }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -122,6 +123,11 @@ export default function LoginPage() {
           .left-side{width:100%!important;padding:36px 24px!important;}
         }
       `}</style>
+
+      <PublicHeader activePage="login" />
+
+      {/* المحتوى الرئيسي */}
+      <div style={{ display:'flex', flex:1 }}>
 
       {/* ══ الجانب الأيمن — هوية مِداد ══ */}
       <div className="right-side" style={{
@@ -197,8 +203,6 @@ export default function LoginPage() {
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
         padding:'52px 44px', position:'relative', overflow:'hidden',
       }}>
-        {/* شريط هوية مِداد علوي */}
-        <div style={{ position:'absolute', top:0, left:0, right:0, height:4, background:B.gradMain }} />
         <div style={{ position:'absolute', bottom:-50, left:-40, width:220, height:220, borderRadius:'50%', background:'rgba(150,30,45,0.05)', filter:'blur(60px)', pointerEvents:'none' }} />
 
         <div style={{ width:'100%', maxWidth:320, position:'relative', zIndex:2 }}>
@@ -301,6 +305,7 @@ export default function LoginPage() {
           </div>
           <p style={{ textAlign:'center', fontSize:12, color:`${B.sub}50`, marginTop:18 }}>مِداد • الكويت 🇰🇼</p>
         </div>
+      </div>
       </div>
     </div>
   )
