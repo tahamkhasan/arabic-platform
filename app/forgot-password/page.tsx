@@ -49,13 +49,13 @@ export default function ForgotPasswordPage() {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       })
 
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
 
       if (!res.ok) {
-        setError(data.error || 'حدث خطأ أثناء الإرسال')
+        setError(data?.error || 'حدث خطأ أثناء الإرسال')
         return
       }
 
@@ -82,7 +82,7 @@ export default function ForgotPasswordPage() {
             radial-gradient(circle at 78% 78%, rgba(231,169,59,0.09), transparent 24%),
             ${C.bg}
           `,
-          fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+          fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -137,7 +137,7 @@ export default function ForgotPasswordPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(67,122,34,0.10)',
+              background: C.successBg,
               border: `1px solid ${C.successBorder}`,
               fontSize: 34,
             }}
@@ -158,7 +158,7 @@ export default function ForgotPasswordPage() {
           </p>
 
           <button
-            onClick={() => router.push('/login')}
+            onClick={() => router.replace('/login')}
             style={{
               width: '100%',
               padding: 14,
@@ -194,7 +194,7 @@ export default function ForgotPasswordPage() {
           radial-gradient(circle at 78% 78%, rgba(231,169,59,0.09), transparent 24%),
           ${C.bg}
         `,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -413,7 +413,7 @@ export default function ForgotPasswordPage() {
 
           <button
             className="btn-sub a5"
-            onClick={() => router.push('/login')}
+            onClick={() => router.replace('/login')}
             style={{
               width: '100%',
               padding: 13,

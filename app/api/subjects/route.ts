@@ -1,95 +1,80 @@
+// ============================================================
+// API: المواد الدراسية
+// GET: قائمة المواد — مع دعم فلترة ?teacherId= (مواد المعلم
+// المخصَّصة فقط عبر teacher_subjects) أو بلا فلترة (كل المواد،
+// للأدمن أو الصفحات العامة).
+//
+// ── مُعاد إلى صيغته الأصلية الفعّالة: نسخة سابقة (من جلسة عمل
+// مستقلة خارج هذه المحادثة) أضافت حارس requireUser/Bearer هنا،
+// بينما الواجهات الفعلية المستخدِمة لهذه النقطة (dashboard/page.tsx
+// و teacher/page.tsx) لا ترسل Authorization header أصلاً — فصار كل
+// استدعاء يُرفَض بـ"Missing bearer token". أُعيدت النقطة لتعمل بلا
+// حارس Bearer، مطابقةً لما تتوقعه الواجهات الفعلية المعتمدة عليها. ──
+// ============================================================
+
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const stage  = searchParams.get('stage')
-    const grade  = searchParams.get('grade')
-    const stages = searchParams.get('stages') // مراحل متعددة للمعلم
+    const teacherId = searchParams.get('teacherId')
+    const stages = searchParams.get('stages')
 
-    let query = supabaseAdmin
-      .from('subjects')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
+    // ── فلترة بمواد المعلم المخصَّصة فقط (عبر teacher_subjects) ──
+    if (teacherId) {
+      const { data: assigned, error: assignedError } = await supabaseAdmin
+        .from('teacher_subjects')
+        .select('subject_id')
+        .eq('teacher_id', teacherId)
 
-    // فلترة حسب مرحلة واحدة
-    if (stage) query = query.eq('stage', stage)
+      if (assignedError) {
+        console.error('GET /api/subjects (teacherId) error:', assignedError)
+        return NextResponse.json({ error: 'فشل جلب مواد المعلم.' }, { status: 500 })
+      }
 
-    // فلترة حسب مراحل متعددة (للمعلم)
-    if (stages) {
-      const stageArray = stages.split(',')
-      query = query.in('stage', stageArray)
+      const subjectIds = (assigned || []).map((r) => r.subject_id)
+      if (subjectIds.length === 0) {
+        return NextResponse.json({ subjects: [] })
+      }
+
+      const { data: subjects, error: subjectsError } = await supabaseAdmin
+        .from('subjects')
+        .select('id, name, icon, grade, stage')
+        .in('id', subjectIds)
+        .order('name', { ascending: true })
+
+      if (subjectsError) {
+        console.error('GET /api/subjects (by ids) error:', subjectsError)
+        return NextResponse.json({ error: 'فشل جلب المواد.' }, { status: 500 })
+      }
+
+      return NextResponse.json({ subjects: subjects || [] })
     }
 
-    // فلترة حسب الصف (للطالب)
-    if (grade) query = query.eq('grade', grade)
-
-    const { data, error } = await query
-    if (error) throw error
-
-    return NextResponse.json({ subjects: data || [] })
-  } catch (error: any) {
-    return NextResponse.json({ subjects: [] })
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const { name, description, stage, grade, icon, adminId } = await req.json()
-
-    const { data: admin } = await supabaseAdmin
-      .from('users').select('role').eq('id', adminId).single()
-    if (!admin || admin.role !== 'admin')
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
-
-    const { data, error } = await supabaseAdmin
+    // ── بلا teacherId: كل المواد (اختيارياً مفلترة بالمراحل) ──────
+    let query = supabaseAdmin
       .from('subjects')
-      .insert({ name, description, stage, grade, icon: icon || '📚', created_by: adminId })
-      .select().single()
+      .select('id, name, icon, grade, stage')
+      .order('name', { ascending: true })
 
-    if (error) throw error
-    return NextResponse.json({ subject: data })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
+    if (stages) {
+      const stageList = stages.split(',').map((s) => s.trim()).filter(Boolean)
+      if (stageList.length > 0) {
+        query = query.in('stage', stageList)
+      }
+    }
 
-export async function PUT(req: NextRequest) {
-  try {
-    const { id, name, description, stage, grade, icon, is_active, adminId } = await req.json()
+    const { data: subjects, error: subjectsError } = await query
 
-    const { data: admin } = await supabaseAdmin
-      .from('users').select('role').eq('id', adminId).single()
-    if (!admin || admin.role !== 'admin')
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
+    if (subjectsError) {
+      console.error('GET /api/subjects error:', subjectsError)
+      return NextResponse.json({ error: 'فشل جلب المواد.' }, { status: 500 })
+    }
 
-    const { data, error } = await supabaseAdmin
-      .from('subjects')
-      .update({ name, description, stage, grade, icon, is_active })
-      .eq('id', id).select().single()
-
-    if (error) throw error
-    return NextResponse.json({ subject: data })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-export async function DELETE(req: NextRequest) {
-  try {
-    const { id, adminId } = await req.json()
-
-    const { data: admin } = await supabaseAdmin
-      .from('users').select('role').eq('id', adminId).single()
-    if (!admin || admin.role !== 'admin')
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 })
-
-    const { error } = await supabaseAdmin.from('subjects').delete().eq('id', id)
-    if (error) throw error
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ subjects: subjects || [] })
+  } catch (err) {
+    console.error('GET /api/subjects error:', err)
+    return NextResponse.json({ error: 'حدث خطأ غير متوقع.' }, { status: 500 })
   }
 }

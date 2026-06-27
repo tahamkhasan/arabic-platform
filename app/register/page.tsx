@@ -1,336 +1,285 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import MidadLogo from '@/components/MidadLogo'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
-const STAGES = [
-  {
-    id: 'primary',
-    label: 'ابتدائي',
-    shortLabel: 'ابتدائي',
-    icon: '🌱',
-    grades: ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس'],
-    tone: '#5E8B55',
-  },
-  {
-    id: 'middle',
-    label: 'متوسط',
-    shortLabel: 'متوسط',
-    icon: '📚',
-    grades: ['السادس', 'السابع', 'الثامن', 'التاسع'],
-    tone: '#4F7A8A',
-  },
-  {
-    id: 'high',
-    label: 'ثانوي',
-    shortLabel: 'ثانوي',
-    icon: '🎓',
-    grades: ['العاشر', 'الحادي عشر', 'الثاني عشر'],
-    tone: '#9A6B39',
-  },
-] as const
-
-type UserType = 'teacher' | 'student'
-
-const C = {
-  bg: '#F7F2EA',
-  bgSoft: '#FCF8F2',
-  surface: '#FDFAF6',
-  surfaceSoft: 'rgba(255,255,255,0.60)',
-  text: '#1F1720',
-  sub: '#6F5B5B',
-  muted: '#9B8A84',
-  deep: '#7B1A1A',
-  red: '#C0392B',
-  redDark: '#9F2D22',
-  orange: '#E07A24',
-  gold: '#E7A93B',
-  border: 'rgba(123,26,26,0.12)',
-  borderStrong: 'rgba(123,26,26,0.22)',
-  inputBg: 'rgba(123,26,26,0.04)',
-  inputBgFocus: 'rgba(123,26,26,0.06)',
-  primarySoft: 'rgba(192,57,43,0.10)',
-  primarySofter: 'rgba(192,57,43,0.06)',
-  successBg: 'rgba(67,122,34,0.10)',
-  successBorder: 'rgba(67,122,34,0.20)',
-  successText: '#437A22',
-  dangerBg: 'rgba(161,53,68,0.10)',
-  dangerBorder: 'rgba(161,53,68,0.18)',
-  dangerText: '#A13544',
-  primaryGrad: 'linear-gradient(135deg,#7B1A1A,#C0392B,#E07A24)',
-  warmLine: 'linear-gradient(90deg,#7B1A1A,#C0392B,#E07A24,#E7A93B)',
-  shadowCard: '0 24px 60px rgba(63,22,22,0.08)',
-  shadowSoft: '0 18px 44px rgba(63,22,22,0.06)',
-  shadowBtn: '0 14px 30px rgba(192,57,43,0.18)',
-  greenBtn: '#437A22',
-  greenBtnSoft: 'rgba(67,122,34,0.22)',
-  greenShadow: '0 14px 24px rgba(67,122,34,0.18)',
+const T = {
+  bg: '#F5F0E8',
+  cardBg: '#FDFAF5',
+  textCol: '#1A1221',
+  subCol: '#6B5050',
+  borderCol: 'rgba(192,57,43,0.15)',
+  borderFocus: 'rgba(192,57,43,0.45)',
+  inputBg: 'rgba(192,57,43,0.05)',
+  headerBg: 'rgba(245,240,232,0.97)',
+  shadow: '0 2px 12px rgba(192,57,43,0.08)',
+  gradMain: 'linear-gradient(135deg,#C0392B,#E07020)',
+  gradBlue: 'linear-gradient(135deg,#2563EB,#1D4ED8)',
+  shadowBlue: '0 8px 28px rgba(37,99,235,0.40)',
 }
 
-export default function RegisterPage() {
-  const router = useRouter()
+// ── المرحلة والصف — يختارهما الطالب مباشرة عند التسجيل ─────────
+// (فقط حين لا توجد باقة/مادة محدَّدة مسبقاً من صفحة الهبوط)
+const STAGE_GRADES: Record<string, string[]> = {
+  'ابتدائي': ['1', '2', '3', '4', '5'],
+  'متوسط':   ['6', '7', '8', '9'],
+  'ثانوي':   ['10', '11', '12'],
+}
 
-  const [step, setStep] = useState(1)
+type RegisterType = 'staff' | 'student'
+type PlanType = 'package' | 'subject'
+
+interface SelectedPlan {
+  id: string
+  name: string
+  stage?: string | null
+  grade?: string | null
+  track?: string | null
+}
+
+function RegisterForm() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const [registerType, setRegisterType] = useState<RegisterType>('student')
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [userType, setUserType] = useState<UserType>('teacher')
-  const [selectedStages, setSelectedStages] = useState<string[]>([])
-  const [selectedStageForGrade, setSelectedStageForGrade] = useState<string | null>(null)
-  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
-  const [showPw, setShowPw] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPass, setShowPass] = useState(false)
+
+  // خاصة بالطالب فقط — مرحلة وصف واحد، لا أدوار ولا roleId هنا
+  // (تُستخدَم فقط في حال عدم وجود باقة/مادة محدَّدة من الهبوط)
+  const [stage, setStage] = useState('')
+  const [grade, setGrade] = useState('')
+
+  // ── جديد: الباقة أو المادة المختارة من صفحة الهبوط ──────────
+  const planType = searchParams.get('type') as PlanType | null
+  const planId = searchParams.get('id')
+  const [selectedPlan, setSelectedPlan] = useState<SelectedPlan | null>(null)
+  const [planLoading, setPlanLoading] = useState(Boolean(planType && planId))
+  const [planError, setPlanError] = useState('')
+
+  const hasPreselectedPlan = Boolean(planType && planId)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [focusField, setFocusField] = useState('')
 
-  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-  const canGoNext = name.trim().length >= 3 && emailIsValid && password.length >= 8
-  const canSubmitTeacher = userType === 'teacher' && selectedStages.length > 0
-  const canSubmitStudent = userType === 'student' && !!selectedStageForGrade && !!selectedGrade
-  const canSubmit = userType === 'teacher' ? canSubmitTeacher : canSubmitStudent
-
-  const selectedStageObject = useMemo(
-    () => STAGES.find(stage => stage.id === selectedStageForGrade) || null,
-    [selectedStageForGrade]
-  )
-
-  function toggleStage(stageId: string) {
-    setSelectedStages(prev =>
-      prev.includes(stageId) ? prev.filter(item => item !== stageId) : [...prev, stageId]
-    )
-  }
-
-  function validateStepOne() {
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('أدخل جميع البيانات المطلوبة')
-      return false
-    }
-
-    if (name.trim().length < 3) {
-      setError('الاسم الكامل يجب أن يكون أوضح')
-      return false
-    }
-
-    if (!emailIsValid) {
-      setError('أدخل بريداً إلكترونياً صحيحاً')
-      return false
-    }
-
-    if (password.length < 8) {
-      setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل')
-      return false
-    }
-
-    setError('')
-    return true
-  }
-
-  function handleNext() {
-    if (!validateStepOne()) return
-    setStep(2)
-  }
-
-  async function handleRegister() {
-    if (userType === 'teacher' && selectedStages.length === 0) {
-      setError('اختر مرحلة دراسية واحدة على الأقل')
+  // ── جلب تفاصيل الباقة/المادة المختارة لعرضها كتأكيد ─────────
+  useEffect(() => {
+    if (!planType || !planId) {
+      setPlanLoading(false)
       return
     }
 
-    if (userType === 'student' && (!selectedStageForGrade || !selectedGrade)) {
-      setError('اختر المرحلة والصف الدراسي')
+    let mounted = true
+    setPlanLoading(true)
+    setPlanError('')
+
+    const endpoint =
+      planType === 'package' ? '/api/subject-packages' : '/api/subjects'
+
+    fetch(endpoint)
+      .then(r => r.json())
+      .then(data => {
+        if (!mounted) return
+        const list =
+          planType === 'package'
+            ? (data?.items ?? data?.packages ?? [])
+            : (data?.subjects ?? [])
+        const found = list.find((item: any) => item.id === planId)
+        if (found) {
+          setSelectedPlan({
+            id: found.id,
+            name: found.name,
+            stage: found.stage ?? null,
+            grade: found.grade ?? null,
+            track: found.track ?? null,
+          })
+        } else {
+          setPlanError('تعذّر العثور على هذا الاختيار — قد يكون قد أُزيل. يمكنك التسجيل واختيار المرحلة يدوياً، أو العودة لصفحة الهبوط لاختيار آخر.')
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setPlanError('تعذّر تحميل تفاصيل الاختيار. يمكنك التسجيل واختيار المرحلة يدوياً.')
+        }
+      })
+      .finally(() => {
+        if (mounted) setPlanLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [planType, planId])
+
+  function handleStageChange(value: string) {
+    setStage(value)
+    setGrade('') // إعادة ضبط الصف عند تغيير المرحلة
+  }
+
+  function validate(): string | null {
+    if (!name.trim()) return 'يرجى إدخال الاسم الكامل'
+    if (!email.trim()) return 'يرجى إدخال البريد الإلكتروني'
+    if (!password) return 'يرجى إدخال كلمة المرور'
+    if (password.length < 8) return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'
+    if (password !== confirmPassword) return 'كلمتا المرور غير متطابقتين'
+
+    if (registerType === 'student') {
+      // المرحلة/الصف اليدويان مطلوبان فقط حين لا توجد باقة/مادة
+      // محدَّدة مسبقاً تُستنتج منها هاتان القيمتان تلقائياً.
+      if (!hasPreselectedPlan || !selectedPlan) {
+        if (!stage) return 'يرجى اختيار المرحلة الدراسية'
+        if (!grade) return 'يرجى اختيار الصف'
+      }
+    }
+
+    return null
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
       return
     }
 
     setLoading(true)
-    setError('')
 
     try {
+      // ══ الحمولة المُرسلة — بدون roleId / roleKey / assigned_role_key ══
+      // userType فقط: 'teacher' (موظف) أو 'student' (طالب).
+      // تخصيص الدور الدقيق (معلم/مشرف/مدير/مدخل بيانات) يتم لاحقاً
+      // من لوحة المدير عبر assigned_role_id — لا علاقة لهذا الفورم به.
+      //
+      // جديد — planType/planId: إن وُجد اختيار باقة/مادة من صفحة
+      // الهبوط، تُرسَل المعرّفات ليكتب /api/register الاشتراك مباشرة
+      // عند إنشاء الحساب، ويُستنتج allowedStages/allowedGrades من
+      // الباقة/المادة نفسها بدل الحقول اليدوية.
+      const usePreselected = hasPreselectedPlan && Boolean(selectedPlan)
+
+      const payload = {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        userType: registerType === 'student' ? 'student' : 'teacher',
+        allowedStages:
+          registerType === 'student'
+            ? usePreselected
+              ? selectedPlan?.stage ? [selectedPlan.stage] : []
+              : stage ? [stage] : []
+            : [],
+        allowedGrades:
+          registerType === 'student'
+            ? usePreselected
+              ? selectedPlan?.grade ? [selectedPlan.grade] : []
+              : grade ? [grade] : []
+            : [],
+        ...(registerType === 'student' && usePreselected
+          ? { planType, planId }
+          : {}),
+      }
+
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          password,
-          userType,
-          allowedStages: userType === 'teacher' ? selectedStages : [selectedStageForGrade],
-          allowedGrades: userType === 'student' ? [selectedGrade] : [],
-        }),
+        body: JSON.stringify(payload),
       })
 
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
 
       if (!res.ok) {
-        setError(data.error || 'حدث خطأ أثناء إرسال الطلب')
+        setError(data?.error || 'حدث خطأ أثناء إنشاء الحساب')
         return
       }
 
       setSuccess(true)
     } catch {
-      setError('تعذر إرسال الطلب الآن، حاول مرة أخرى بعد قليل')
+      setError('تعذّر الاتصال بالخادم')
     } finally {
       setLoading(false)
     }
   }
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle = (field: string): React.CSSProperties => ({
     width: '100%',
-    padding: '15px 16px',
-    borderRadius: 16,
-    border: `1.5px solid ${C.border}`,
-    background: C.inputBg,
-    color: C.text,
+    padding: '13px 44px 13px 16px',
+    borderRadius: 12,
+    border: `1.5px solid ${focusField === field ? T.borderFocus : T.borderCol}`,
+    background: T.inputBg,
+    color: T.textCol,
     fontSize: 14,
     fontFamily: 'inherit',
+    boxShadow: focusField === field ? '0 0 0 3px rgba(192,57,43,0.08)' : 'none',
+    transition: 'border-color 0.2s, box-shadow 0.2s',
     outline: 'none',
-    transition: '0.18s ease',
-  }
+  })
 
+  // ══ شاشة النجاح ══
   if (success) {
     return (
       <div
         dir="rtl"
         style={{
           minHeight: '100vh',
-          background: `
-            radial-gradient(circle at 12% 18%, rgba(192,57,43,0.05), transparent 24%),
-            radial-gradient(circle at 88% 78%, rgba(231,169,59,0.08), transparent 22%),
-            ${C.bg}
-          `,
-          fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-          color: C.text,
-          padding: '24px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          background: T.bg,
+          fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+          padding: 20,
         }}
       >
-        <style>{`
-          * { box-sizing: border-box; }
-          html, body { margin: 0; padding: 0; background: ${C.bg}; }
-          button, input { font-family: inherit; }
-        `}</style>
-
         <div
           style={{
             width: '100%',
-            maxWidth: 540,
-            background: C.surface,
-            border: `1.5px solid ${C.border}`,
-            borderRadius: 30,
-            padding: 32,
-            boxShadow: C.shadowCard,
+            maxWidth: 460,
+            background: T.cardBg,
+            borderRadius: 22,
+            border: `1px solid ${T.borderCol}`,
+            boxShadow: T.shadow,
+            padding: '40px 32px',
             textAlign: 'center',
-            position: 'relative',
-            overflow: 'hidden',
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              left: 0,
-              height: 3,
-              background: C.warmLine,
-            }}
-          />
-
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-            <MidadLogo size={42} dark={false} />
-          </div>
-
-          <div
-            style={{
-              width: 84,
-              height: 84,
-              margin: '0 auto 18px',
-              borderRadius: 24,
-              background: C.successBg,
-              border: `1px solid ${C.successBorder}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 36,
-            }}
-          >
-            ✓
-          </div>
-
-          <div
+          <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: T.textCol, marginBottom: 10 }}>
+            تم إنشاء حسابك بنجاح
+          </h1>
+          <p style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9, marginBottom: 28 }}>
+            {registerType === 'student'
+              ? hasPreselectedPlan && selectedPlan
+                ? `تم حفظ اختيارك (${selectedPlan.name}) مع حسابك. بانتظار موافقة المدير على حسابك. سيصلك إشعار عند التفعيل.`
+                : 'بانتظار موافقة المدير على حسابك. سيصلك إشعار عند التفعيل.'
+              : 'بانتظار موافقة المدير وتعيين دورك (معلم / مشرف / مدخل بيانات). سيصلك إشعار عند التفعيل.'}
+          </p>
+          <Link
+            href="/login"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '8px 12px',
-              borderRadius: 999,
-              background: C.primarySofter,
-              border: `1px solid ${C.border}`,
-              color: C.red,
-              fontSize: 12,
-              fontWeight: 800,
-              marginBottom: 14,
-            }}
-          >
-            تم إرسال الطلب بنجاح
-          </div>
-
-          <h1
-            style={{
-              fontSize: 30,
-              lineHeight: 1.3,
-              margin: '0 0 10px',
-              fontWeight: 900,
-              color: C.text,
-            }}
-          >
-            تم استلام طلب التسجيل
-          </h1>
-
-          <p style={{ fontSize: 14, lineHeight: 2, color: C.sub, margin: '0 0 8px' }}>
-            طلبك الآن قيد المراجعة من إدارة المنصة قبل التفعيل.
-          </p>
-
-          <p style={{ fontSize: 14, lineHeight: 2, color: C.sub, margin: '0 0 20px' }}>
-            ستصل نتيجة المراجعة إلى البريد التالي:
-            <br />
-            <span style={{ color: C.red, fontWeight: 900 }}>{email}</span>
-          </p>
-
-          <div
-            style={{
-              padding: '14px 16px',
-              borderRadius: 16,
-              background: C.successBg,
-              border: `1px solid ${C.successBorder}`,
-              color: C.successText,
-              fontSize: 13,
-              lineHeight: 1.9,
-              fontWeight: 700,
-              marginBottom: 18,
-            }}
-          >
-            بعد الموافقة ستتمكن من الدخول بحسب المرحلة أو الصف الذي حددته أثناء التسجيل.
-          </div>
-
-          <button
-            onClick={() => router.push('/login')}
-            style={{
+              justifyContent: 'center',
               width: '100%',
-              padding: '15px 16px',
-              borderRadius: 16,
-              border: 'none',
-              background: C.primaryGrad,
+              padding: '14px',
+              borderRadius: 12,
+              background: T.gradBlue,
               color: '#fff',
-              fontSize: 15,
               fontWeight: 900,
-              cursor: 'pointer',
-              boxShadow: C.shadowBtn,
+              fontSize: 15,
+              textDecoration: 'none',
+              boxShadow: T.shadowBlue,
             }}
           >
-            العودة إلى تسجيل الدخول
-          </button>
+            الذهاب إلى تسجيل الدخول ←
+          </Link>
         </div>
       </div>
     )
@@ -341,968 +290,455 @@ export default function RegisterPage() {
       dir="rtl"
       style={{
         minHeight: '100vh',
-        background: `
-          radial-gradient(circle at 12% 18%, rgba(192,57,43,0.05), transparent 24%),
-          radial-gradient(circle at 88% 78%, rgba(231,169,59,0.08), transparent 22%),
-          ${C.bg}
-        `,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
-        color: C.text,
-        position: 'relative',
-        overflow: 'hidden',
+        background: T.bg,
+        color: T.textCol,
+        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <style>{`
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: ${C.bg}; }
-        button, input { font-family: inherit; }
-        input::placeholder { color: ${C.muted}; }
-        input:focus, button:focus { outline: none; }
-
-        .register-shell {
-          max-width: 1160px;
-          margin: 0 auto;
-          min-height: 100vh;
-          display: grid;
-          grid-template-columns: 1.08fr 0.92fr;
-          gap: 24px;
-          align-items: center;
-          padding: 28px 16px;
-          position: relative;
-          z-index: 2;
+        body { margin: 0; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes glow {
+          0%, 100% { box-shadow: ${T.shadowBlue}; }
+          50% { box-shadow: 0 12px 38px rgba(37,99,235,0.62); }
         }
-
-        .soft-orb {
-          position: absolute;
-          border-radius: 999px;
-          filter: blur(10px);
-          pointer-events: none;
-          opacity: 0.45;
+        select option {
+          background: #F5F0E8 !important;
+          color: #1A1221 !important;
         }
-
-        .hover-up {
-          transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-        }
-
-        .hover-up:hover {
-          transform: translateY(-2px);
-        }
-
-        .field input {
-          width: 100%;
-          padding: 15px 16px;
-          border-radius: 16px;
-          border: 1.5px solid ${C.border};
-          background: ${C.inputBg};
-          color: ${C.text};
-          font-size: 14px;
-          transition: border-color .18s, background .18s, box-shadow .18s;
-        }
-
-        .field input:focus {
-          border-color: ${C.borderStrong};
-          background: ${C.inputBgFocus};
-          box-shadow: 0 0 0 4px rgba(192,57,43,0.08);
-        }
-
-        @media (max-width: 980px) {
-          .register-shell {
-            grid-template-columns: 1fr;
-            gap: 18px;
-            align-items: start;
-            padding: 18px 14px 28px;
-          }
-
-          .hero-panel {
-            min-height: auto !important;
-            order: 2;
-          }
-
-          .form-panel {
-            order: 1;
-            max-width: 100% !important;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .stage-grid-student {
-            grid-template-columns: 1fr !important;
-          }
-
-          .account-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .hero-title {
-            font-size: 30px !important;
-          }
-
-          .card-padding {
-            padding: 22px !important;
-          }
-        }
+        select { color-scheme: light; }
+        input:focus, select:focus { outline: none; }
       `}</style>
 
-      <div
-        className="soft-orb"
+      {/* ══ شريط علوي مبسّط ══ */}
+      <header
         style={{
-          top: -70,
-          right: -40,
-          width: 260,
-          height: 260,
-          background: 'rgba(192,57,43,0.08)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: T.headerBg,
+          backdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${T.borderCol}`,
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: T.shadow,
         }}
-      />
-
-      <div
-        className="soft-orb"
-        style={{
-          bottom: 60,
-          left: -60,
-          width: 240,
-          height: 240,
-          background: 'rgba(90,120,110,0.08)',
-        }}
-      />
-
-      <div className="register-shell">
-        <section
-          className="hero-panel card-padding"
-          style={{
-            background: `linear-gradient(180deg, ${C.surfaceSoft}, rgba(255,255,255,0.34))`,
-            border: `1.5px solid ${C.border}`,
-            borderRadius: 32,
-            padding: 34,
-            minHeight: 680,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: C.shadowSoft,
-            backdropFilter: 'blur(8px)',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
+      >
+        <Link
+          href="/landing"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}
         >
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 18% 22%, rgba(192,57,43,0.06), transparent 28%), radial-gradient(circle at 76% 74%, rgba(231,169,59,0.08), transparent 24%)',
-              pointerEvents: 'none',
-            }}
-          />
-
-          <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22 }}>
-              <MidadLogo size={40} dark={false} />
-            </div>
-
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 14px',
-                borderRadius: 999,
-                background: C.surface,
-                border: `1px solid ${C.border}`,
-                color: C.red,
-                fontWeight: 900,
-                fontSize: 13,
-                marginBottom: 22,
-              }}
-            >
-              منصة عربية للمعلّم والمتعلّم
-            </div>
-
-            <h1
-              className="hero-title"
-              style={{
-                fontSize: 42,
-                lineHeight: 1.28,
-                margin: '0 0 14px',
-                fontWeight: 900,
-                color: C.text,
-                letterSpacing: '-0.02em',
-              }}
-            >
-              ابدأ حسابك
-              <br />
-              في تجربة عربية
-              <br />
-              هادئة وواضحة
-            </h1>
-
-            <p
-              style={{
-                fontSize: 16,
-                lineHeight: 2,
-                color: C.sub,
-                margin: 0,
-                maxWidth: 560,
-              }}
-            >
-              سجّل كمعلم أو طالب بخطوتين فقط، ثم يُراجع طلبك قبل التفعيل حتى يظهر لك
-              المحتوى المناسب بحسب مرحلتك أو صفك الدراسي.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gap: 14, marginTop: 28, position: 'relative', zIndex: 2 }}>
-            {[
-              [
-                'للمعلم',
-                'اختر مرحلة واحدة أو أكثر، ثم استخدم أدوات الشرح والاختبار والخطة وورقة العمل.',
-                '👨‍🏫',
-              ],
-              [
-                'للطالب',
-                'ادخل إلى محتوى صفك فقط، بشكل أبسط وأوضح ومنظّم بحسب مرحلتك الدراسية.',
-                '👨‍🎓',
-              ],
-              [
-                'مراجعة قبل التفعيل',
-                'كل طلب جديد يدخل للمراجعة أولاً للمحافظة على تنظيم الحسابات وجودة الوصول.',
-                '✓',
-              ],
-            ].map(([title, desc, icon]) => (
-              <div
-                key={title}
-                className="hover-up"
-                style={{
-                  background: C.surface,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 20,
-                  padding: '16px 18px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 14,
-                }}
-              >
-                <div
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 15,
-                    background: C.primarySoft,
-                    color: C.red,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 20,
-                    fontWeight: 900,
-                    flexShrink: 0,
-                  }}
-                >
-                  {icon}
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 900,
-                      color: C.text,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {title}
-                  </div>
-
-                  <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.9 }}>{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: 26,
-              paddingTop: 20,
-              borderTop: `1px dashed ${C.border}`,
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: T.gradMain,
               display: 'flex',
-              flexWrap: 'wrap',
-              gap: 10,
-              position: 'relative',
-              zIndex: 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              fontWeight: 900,
+              color: '#fff',
             }}
           >
-            {['شرح', 'اختبار', 'خطة درس', 'ورقة عمل', 'لعبة لغوية', 'محتوى بحسب الصف'].map(
-              item => (
-                <div
-                  key={item}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 999,
-                    background: C.surface,
-                    border: `1px solid ${C.border}`,
-                    color: C.sub,
-                    fontSize: 12,
-                    fontWeight: 800,
-                  }}
-                >
-                  {item}
-                </div>
-              )
-            )}
+            م
           </div>
-        </section>
+          <span style={{ fontSize: 15, fontWeight: 900, color: T.textCol }}>مِداد</span>
+        </Link>
 
-        <section
-          className="form-panel card-padding"
+        <Link
+          href="/login"
           style={{
-            width: '100%',
-            maxWidth: 500,
-            margin: '0 auto',
-            background: C.surface,
-            border: `1.5px solid ${C.border}`,
-            borderRadius: 32,
-            padding: 30,
-            boxShadow: C.shadowCard,
-            position: 'relative',
-            overflow: 'hidden',
+            padding: '8px 16px',
+            borderRadius: 9,
+            fontSize: 13,
+            fontWeight: 700,
+            border: `1.5px solid ${T.borderCol}`,
+            color: T.subCol,
+            textDecoration: 'none',
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              left: 0,
-              height: 3,
-              background: C.warmLine,
-            }}
-          />
+          لدي حساب؟ تسجيل الدخول
+        </Link>
+      </header>
 
-          <div style={{ textAlign: 'center', marginBottom: 24, position: 'relative', zIndex: 2 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-              <MidadLogo size={36} dark={false} />
-            </div>
+      {/* ══ النموذج ══ */}
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 16px',
+        }}
+      >
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            width: '100%',
+            maxWidth: 480,
+            background: T.cardBg,
+            borderRadius: 22,
+            border: `1px solid ${T.borderCol}`,
+            boxShadow: T.shadow,
+            padding: '32px 28px',
+          }}
+        >
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: T.textCol, marginBottom: 6, textAlign: 'center' }}>
+            إنشاء حساب جديد ✨
+          </h1>
+          <p style={{ fontSize: 14, color: T.subCol, textAlign: 'center', marginBottom: 24 }}>
+            انضم إلى منصة مِداد
+          </p>
 
+          {/* ── جديد: شريط تأكيد الباقة/المادة المختارة من الهبوط ── */}
+          {hasPreselectedPlan && registerType === 'student' && (
             <div
               style={{
-                width: 78,
-                height: 78,
-                margin: '0 auto 16px',
-                borderRadius: 22,
-                background: C.primarySoft,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 30,
+                marginBottom: 20,
+                padding: '14px 16px',
+                borderRadius: 14,
+                background: planError ? 'rgba(192,57,43,0.06)' : 'rgba(37,99,235,0.07)',
+                border: `1.5px solid ${planError ? 'rgba(192,57,43,0.25)' : 'rgba(37,99,235,0.25)'}`,
               }}
             >
-              {step === 1 ? '✍️' : userType === 'teacher' ? '👨‍🏫' : '👨‍🎓'}
+              {planLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: T.subCol }}>
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      border: '2px solid rgba(37,99,235,0.3)',
+                      borderTopColor: '#2563EB',
+                      borderRadius: '50%',
+                      display: 'inline-block',
+                      animation: 'spin 0.8s linear infinite',
+                    }}
+                  />
+                  جارٍ تحميل تفاصيل اختيارك...
+                </div>
+              ) : planError ? (
+                <div style={{ fontSize: 13, color: '#C0392B', lineHeight: 1.8 }}>
+                  ⚠️ {planError}
+                </div>
+              ) : selectedPlan ? (
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#2563EB', marginBottom: 4 }}>
+                    {planType === 'package' ? '📦 باقتك المختارة' : '📚 مادتك المختارة'}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: T.textCol, marginBottom: 6 }}>
+                    {selectedPlan.name}
+                  </div>
+                  <Link
+                    href="/landing#plans"
+                    style={{ fontSize: 12, color: T.subCol, textDecoration: 'underline' }}
+                  >
+                    تغيير الاختيار
+                  </Link>
+                </div>
+              ) : null}
             </div>
+          )}
 
-            <h2 style={{ margin: '0 0 8px', fontSize: 28, fontWeight: 900, color: C.text }}>
-              {step === 1
-                ? 'إنشاء حساب جديد'
-                : userType === 'teacher'
-                ? 'تحديد المراحل الدراسية'
-                : 'تحديد المرحلة والصف'}
-            </h2>
-
-            <p style={{ margin: 0, color: C.sub, fontSize: 13, lineHeight: 1.9 }}>
-              {step === 1
-                ? 'ابدأ ببياناتك الأساسية، ثم أكمل تهيئة الحساب في الخطوة التالية'
-                : userType === 'teacher'
-                ? 'اختر المراحل التي ستعمل عليها داخل المنصة'
-                : 'اختر مرحلة واحدة ثم حدد الصف الدراسي المناسب'}
-            </p>
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 18 }}>
-              {[1, 2].map(item => (
-                <div
-                  key={item}
+          {/* ── نوع الحساب ── */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 8 }}>
+              نوع الحساب
+            </label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {([
+                { id: 'student' as RegisterType, icon: '👨‍🎓', label: 'طالب' },
+                { id: 'staff' as RegisterType, icon: '👨‍🏫', label: 'موظف بالمنصة' },
+              ]).map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setRegisterType(opt.id)}
                   style={{
-                    width: 82,
-                    height: 8,
-                    borderRadius: 999,
-                    background: step >= item ? C.red : 'rgba(192,57,43,0.11)',
-                    transition: '0.2s',
+                    flex: 1,
+                    padding: '14px 10px',
+                    borderRadius: 12,
+                    border: `2px solid ${registerType === opt.id ? '#C0392B' : T.borderCol}`,
+                    background: registerType === opt.id ? 'rgba(192,57,43,0.08)' : 'transparent',
+                    color: registerType === opt.id ? '#C0392B' : T.subCol,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    transition: 'all 0.2s',
                   }}
-                />
+                >
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>{opt.icon}</div>
+                  {opt.label}
+                </button>
               ))}
             </div>
+            {registerType === 'staff' && (
+              <p style={{ fontSize: 12, color: T.subCol, marginTop: 8, lineHeight: 1.7 }}>
+                سيحدد المدير دورك بدقة (معلم / مشرف / مدخل بيانات) بعد الموافقة على حسابك.
+              </p>
+            )}
           </div>
 
-          {step === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 15, position: 'relative', zIndex: 2 }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: C.sub,
-                    fontWeight: 800,
-                    marginBottom: 8,
-                  }}
-                >
-                  نوع الحساب
-                </div>
+          {error && (
+            <div
+              style={{
+                padding: '11px 14px',
+                borderRadius: 10,
+                marginBottom: 16,
+                fontSize: 13,
+                fontWeight: 600,
+                background: 'rgba(192,57,43,0.08)',
+                border: '1.5px solid rgba(192,57,43,0.28)',
+                color: '#C0392B',
+              }}
+            >
+              {error}
+            </div>
+          )}
 
-                <div
-                  className="account-grid"
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}
-                >
-                  {[
-                    {
-                      id: 'teacher',
-                      label: 'معلم',
-                      icon: '👨‍🏫',
-                      desc: 'إعداد المحتوى التعليمي للمراحل المحددة',
-                    },
-                    {
-                      id: 'student',
-                      label: 'طالب',
-                      icon: '👨‍🎓',
-                      desc: 'الوصول إلى المحتوى المناسب للمرحلة والصف',
-                    },
-                  ].map(option => {
-                    const active = userType === option.id
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setUserType(option.id as UserType)
-                          setSelectedStages([])
-                          setSelectedStageForGrade(null)
-                          setSelectedGrade(null)
-                          setError('')
-                        }}
-                        className="hover-up"
-                        style={{
-                          textAlign: 'right',
-                          padding: '16px 14px',
-                          borderRadius: 18,
-                          border: `1.5px solid ${active ? C.red : C.border}`,
-                          background: active ? C.primarySoft : C.primarySofter,
-                          color: active ? C.red : C.text,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            marginBottom: 6,
-                            fontSize: 14,
-                            fontWeight: 900,
-                          }}
-                        >
-                          <span>{option.icon}</span>
-                          <span>{option.label}</span>
-                        </div>
-
-                        <div style={{ fontSize: 12, color: active ? C.redDark : C.sub, lineHeight: 1.8 }}>
-                          {option.desc}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="field">
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: C.sub,
-                    marginBottom: 7,
-                  }}
-                >
-                  الاسم الكامل
-                </label>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* الاسم */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                الاسم الكامل
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, pointerEvents: 'none' }}>
+                  👤
+                </span>
                 <input
-                  type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="اكتب اسمك الكامل"
-                  style={inputStyle}
+                  onFocus={() => setFocusField('name')}
+                  onBlur={() => setFocusField('')}
+                  placeholder="أدخل اسمك الكامل"
+                  style={inputStyle('name')}
                 />
               </div>
+            </div>
 
-              <div className="field">
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: C.sub,
-                    marginBottom: 7,
-                  }}
-                >
-                  البريد الإلكتروني
-                </label>
-
+            {/* البريد */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                البريد الإلكتروني
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, pointerEvents: 'none' }}>
+                  📧
+                </span>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  style={{ ...inputStyle, direction: 'ltr', textAlign: 'right' }}
+                  onFocus={() => setFocusField('email')}
+                  onBlur={() => setFocusField('')}
+                  placeholder="example@email.com"
+                  style={{ ...inputStyle('email'), direction: 'ltr', textAlign: 'right' }}
                 />
               </div>
-
-              <div className="field">
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: C.sub,
-                    marginBottom: 7,
-                  }}
-                >
-                  كلمة المرور
-                </label>
-
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPw ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleNext()}
-                    placeholder="8 أحرف على الأقل"
-                    style={{ ...inputStyle, paddingLeft: 54 }}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPw(prev => !prev)}
-                    style={{
-                      position: 'absolute',
-                      left: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      border: 'none',
-                      background: 'transparent',
-                      color: C.sub,
-                      cursor: 'pointer',
-                      fontSize: 18,
-                    }}
-                  >
-                    {showPw ? '🙈' : '👁️'}
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 16,
-                  background: C.primarySofter,
-                  border: `1px solid ${C.border}`,
-                  color: C.sub,
-                  fontSize: 12,
-                  lineHeight: 1.9,
-                }}
-              >
-                سيُراجع طلب التسجيل قبل التفعيل، ثم تصلك نتيجة المراجعة عبر البريد الإلكتروني.
-              </div>
-
-              {error && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 16,
-                    background: C.dangerBg,
-                    border: `1px solid ${C.dangerBorder}`,
-                    color: C.dangerText,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    textAlign: 'center',
-                  }}
-                >
-                  {error}
-                </div>
-              )}
-
-              <button
-                onClick={handleNext}
-                disabled={!canGoNext}
-                style={{
-                  width: '100%',
-                  padding: '15px 16px',
-                  borderRadius: 16,
-                  border: 'none',
-                  background: canGoNext ? C.primaryGrad : 'rgba(192,57,43,0.18)',
-                  color: '#fff',
-                  fontSize: 15,
-                  fontWeight: 900,
-                  cursor: canGoNext ? 'pointer' : 'not-allowed',
-                  boxShadow: canGoNext ? C.shadowBtn : 'none',
-                }}
-              >
-                الانتقال إلى الخطوة التالية
-              </button>
-
-              <button
-                onClick={() => router.push('/login')}
-                style={{
-                  width: '100%',
-                  padding: '13px 16px',
-                  borderRadius: 16,
-                  border: `1.5px solid ${C.border}`,
-                  background: 'transparent',
-                  color: C.sub,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                لدي حساب بالفعل
-              </button>
             </div>
-          )}
 
-          {step === 2 && userType === 'teacher' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'relative', zIndex: 2 }}>
-              {STAGES.map(stage => {
-                const active = selectedStages.includes(stage.id)
-
-                return (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => {
-                      toggleStage(stage.id)
-                      setError('')
-                    }}
-                    className="hover-up"
-                    style={{
-                      width: '100%',
-                      padding: '16px',
-                      borderRadius: 20,
-                      border: `1.5px solid ${active ? C.red : C.border}`,
-                      background: active ? C.primarySoft : C.primarySofter,
-                      color: C.text,
-                      textAlign: 'right',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 52,
-                        height: 52,
-                        borderRadius: 16,
-                        background: active ? 'rgba(192,57,43,0.16)' : C.surface,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 24,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {stage.icon}
-                    </div>
-
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 900,
-                          color: active ? C.red : C.text,
-                        }}
-                      >
-                        {stage.label}
-                      </div>
-
-                      <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>
-                        من الصف {stage.grades[0]} إلى الصف {stage.grades[stage.grades.length - 1]}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 999,
-                        border: `1.5px solid ${active ? C.red : C.border}`,
-                        background: active ? C.red : 'transparent',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 12,
-                        fontWeight: 900,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {active ? '✓' : ''}
-                    </div>
-                  </button>
-                )
-              })}
-
-              <div
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 16,
-                  background: C.primarySofter,
-                  border: `1px solid ${C.border}`,
-                }}
-              >
-                <div style={{ fontSize: 12, color: C.sub, marginBottom: 8, fontWeight: 800 }}>
-                  ملخص الطلب
-                </div>
-
-                <div style={{ fontSize: 14, color: C.text, lineHeight: 1.9 }}>
-                  <span style={{ color: C.red, fontWeight: 900 }}>نوع الحساب:</span> معلم
-                  <br />
-                  <span style={{ color: C.red, fontWeight: 900 }}>المراحل المختارة:</span>{' '}
-                  {selectedStages.length
-                    ? selectedStages
-                        .map(id => STAGES.find(stage => stage.id === id)?.shortLabel)
-                        .filter(Boolean)
-                        .join('، ')
-                    : 'لم يتم الاختيار بعد'}
-                </div>
-              </div>
-
-              {error && (
-                <div
+            {/* كلمة المرور */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                كلمة المرور
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, pointerEvents: 'none' }}>
+                  🔑
+                </span>
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onFocus={() => setFocusField('password')}
+                  onBlur={() => setFocusField('')}
+                  placeholder="٨ أحرف على الأقل"
+                  style={{ ...inputStyle('password'), paddingLeft: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(s => !s)}
                   style={{
-                    padding: '12px 14px',
-                    borderRadius: 16,
-                    background: C.dangerBg,
-                    border: `1px solid ${C.dangerBorder}`,
-                    color: C.dangerText,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    textAlign: 'center',
+                    position: 'absolute',
+                    left: 13,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    color: T.subCol,
+                    padding: 0,
                   }}
                 >
-                  {error}
-                </div>
-              )}
-
-              <button
-                onClick={handleRegister}
-                disabled={loading || !canSubmit}
-                style={{
-                  width: '100%',
-                  padding: '15px 16px',
-                  borderRadius: 16,
-                  border: 'none',
-                  background: loading || !canSubmit ? C.greenBtnSoft : C.greenBtn,
-                  color: '#fff',
-                  fontSize: 15,
-                  fontWeight: 900,
-                  cursor: loading || !canSubmit ? 'not-allowed' : 'pointer',
-                  marginTop: 4,
-                  boxShadow: !loading && canSubmit ? C.greenShadow : 'none',
-                }}
-              >
-                {loading ? 'جارٍ إرسال الطلب...' : 'إرسال طلب التسجيل'}
-              </button>
-
-              <button
-                onClick={() => {
-                  setStep(1)
-                  setError('')
-                }}
-                style={{
-                  width: '100%',
-                  padding: '11px 16px',
-                  borderRadius: 14,
-                  border: 'none',
-                  background: 'transparent',
-                  color: C.sub,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                رجوع إلى البيانات الأساسية
-              </button>
+                  {showPass ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
-          )}
 
-          {step === 2 && userType === 'student' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', zIndex: 2 }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: C.sub,
-                    fontWeight: 800,
-                    marginBottom: 8,
-                  }}
-                >
-                  المرحلة الدراسية
-                </div>
-
-                <div
-                  className="stage-grid-student"
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}
-                >
-                  {STAGES.map(stage => {
-                    const active = selectedStageForGrade === stage.id
-
-                    return (
-                      <button
-                        key={stage.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedStageForGrade(stage.id)
-                          setSelectedGrade(null)
-                          setError('')
-                        }}
-                        className="hover-up"
-                        style={{
-                          padding: '15px 10px',
-                          borderRadius: 18,
-                          border: `1.5px solid ${active ? C.red : C.border}`,
-                          background: active ? C.primarySoft : C.primarySofter,
-                          color: active ? C.red : C.text,
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontSize: 24, marginBottom: 6 }}>{stage.icon}</div>
-                        <div style={{ fontSize: 13, fontWeight: 900 }}>{stage.label}</div>
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* تأكيد كلمة المرور */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                تأكيد كلمة المرور
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, pointerEvents: 'none' }}>
+                  🔒
+                </span>
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  onFocus={() => setFocusField('confirmPassword')}
+                  onBlur={() => setFocusField('')}
+                  placeholder="أعد كتابة كلمة المرور"
+                  style={inputStyle('confirmPassword')}
+                />
               </div>
+            </div>
 
-              {selectedStageObject && (
+            {/* المرحلة والصف — للطالب فقط، اختيار مباشر بدون أدوار
+                يُعرَض فقط حين لا توجد باقة/مادة محدَّدة مسبقاً من الهبوط،
+                لأن المرحلة/الصف تُستنتج تلقائياً من الاختيار في هذه الحالة. */}
+            {registerType === 'student' && !(hasPreselectedPlan && selectedPlan) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <div
+                  <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                    المرحلة
+                  </label>
+                  <select
+                    value={stage}
+                    onChange={e => handleStageChange(e.target.value)}
+                    style={{ ...inputStyle('stage'), cursor: 'pointer' }}
+                  >
+                    <option value="">اختر المرحلة</option>
+                    {Object.keys(STAGE_GRADES).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                    الصف
+                  </label>
+                  <select
+                    value={grade}
+                    onChange={e => setGrade(e.target.value)}
+                    disabled={!stage}
                     style={{
-                      fontSize: 13,
-                      color: C.sub,
-                      fontWeight: 800,
-                      marginBottom: 8,
+                      ...inputStyle('grade'),
+                      cursor: stage ? 'pointer' : 'not-allowed',
+                      opacity: stage ? 1 : 0.5,
                     }}
                   >
-                    الصف الدراسي
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {selectedStageObject.grades.map(grade => {
-                      const active = selectedGrade === grade
-
-                      return (
-                        <button
-                          key={grade}
-                          type="button"
-                          onClick={() => {
-                            setSelectedGrade(grade)
-                            setError('')
-                          }}
-                          className="hover-up"
-                          style={{
-                            padding: '10px 14px',
-                            borderRadius: 14,
-                            border: `1.5px solid ${active ? C.red : C.border}`,
-                            background: active ? C.primarySoft : C.inputBg,
-                            color: active ? C.red : C.text,
-                            fontSize: 13,
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          الصف {grade}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 16,
-                  background: C.primarySofter,
-                  border: `1px solid ${C.border}`,
-                }}
-              >
-                <div style={{ fontSize: 12, color: C.sub, marginBottom: 8, fontWeight: 800 }}>
-                  ملخص الطلب
-                </div>
-
-                <div style={{ fontSize: 14, color: C.text, lineHeight: 1.9 }}>
-                  <span style={{ color: C.red, fontWeight: 900 }}>نوع الحساب:</span> طالب
-                  <br />
-                  <span style={{ color: C.red, fontWeight: 900 }}>المرحلة:</span>{' '}
-                  {selectedStageObject?.label || 'لم يتم الاختيار بعد'}
-                  <br />
-                  <span style={{ color: C.red, fontWeight: 900 }}>الصف:</span>{' '}
-                  {selectedGrade ? `الصف ${selectedGrade}` : 'لم يتم الاختيار بعد'}
+                    <option value="">{stage ? 'اختر الصف' : 'اختر المرحلة أولاً'}</option>
+                    {stage && STAGE_GRADES[stage].map(g => (
+                      <option key={g} value={g}>الصف {g}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
+            )}
 
-              {error && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 16,
-                    background: C.dangerBg,
-                    border: `1px solid ${C.dangerBorder}`,
-                    color: C.dangerText,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    textAlign: 'center',
-                  }}
-                >
-                  {error}
-                </div>
+            {/* زر الإنشاء — أزرق وهاج */}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '15px',
+                borderRadius: 13,
+                border: 'none',
+                marginTop: 6,
+                background: loading ? 'rgba(107,80,80,0.12)' : T.gradBlue,
+                color: loading ? 'rgba(107,80,80,0.5)' : '#fff',
+                fontSize: 15,
+                fontWeight: 900,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                animation: loading ? 'none' : 'glow 3s ease-in-out infinite',
+              }}
+            >
+              {loading ? (
+                <>
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      border: '2.5px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff',
+                      borderRadius: '50%',
+                      display: 'inline-block',
+                      animation: 'spin 0.8s linear infinite',
+                    }}
+                  />
+                  جارٍ إنشاء الحساب...
+                </>
+              ) : (
+                '✨ إنشاء الحساب'
               )}
+            </button>
+          </div>
 
-              <button
-                onClick={handleRegister}
-                disabled={loading || !canSubmit}
-                style={{
-                  width: '100%',
-                  padding: '15px 16px',
-                  borderRadius: 16,
-                  border: 'none',
-                  background: loading || !canSubmit ? C.greenBtnSoft : C.greenBtn,
-                  color: '#fff',
-                  fontSize: 15,
-                  fontWeight: 900,
-                  cursor: loading || !canSubmit ? 'not-allowed' : 'pointer',
-                  boxShadow: !loading && canSubmit ? C.greenShadow : 'none',
-                }}
-              >
-                {loading ? 'جارٍ إرسال الطلب...' : 'إرسال طلب التسجيل'}
-              </button>
-
-              <button
-                onClick={() => {
-                  setStep(1)
-                  setError('')
-                }}
-                style={{
-                  width: '100%',
-                  padding: '11px 16px',
-                  borderRadius: 14,
-                  border: 'none',
-                  background: 'transparent',
-                  color: C.sub,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                رجوع إلى البيانات الأساسية
-              </button>
-            </div>
-          )}
-        </section>
-      </div>
+          <p style={{ textAlign: 'center', fontSize: 12, color: T.subCol, marginTop: 20 }}>
+            بإنشائك الحساب، أنت توافق على{' '}
+            <Link href="/landing" style={{ color: '#C0392B', textDecoration: 'none', fontWeight: 700 }}>
+              شروط استخدام مِداد
+            </Link>
+          </p>
+        </form>
+      </main>
     </div>
+  )
+}
+
+// ══ غلاف Suspense إلزامي لأن RegisterForm يستخدم useSearchParams() ══
+// (متطلب Next.js App Router لأي مكوّن client يقرأ من searchParams)
+function RegisterFormFallback() {
+  return (
+    <div
+      dir="rtl"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: T.bg,
+        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+      }}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          border: `4px solid ${T.borderFocus}`,
+          borderTopColor: '#C0392B',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }}
+      />
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterFormFallback />}>
+      <RegisterForm />
+    </Suspense>
   )
 }

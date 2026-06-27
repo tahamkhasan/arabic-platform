@@ -1,50 +1,64 @@
+// app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { sendPasswordResetEmail } from '@/lib/email'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !anonKey) {
+    throw new Error('Missing Supabase environment variables.')
+  }
+
+  return createClient(url, anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  })
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { email } = await req.json()
+    const body = await req.json().catch(() => null)
+    const email = body?.email?.trim()?.toLowerCase()
 
     if (!email) {
-      return NextResponse.json({ error: 'أدخل البريد الإلكتروني' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'البريد الإلكتروني مطلوب.' },
+        { status: 400 }
+      )
     }
 
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, email, name, status')
-      .eq('email', email)
-      .single()
+    const supabase = getSupabaseAdmin()
 
-    if (userError || !user) {
-      return NextResponse.json({ error: 'البريد الإلكتروني غير مسجل' }, { status: 404 })
+    const redirectTo =
+      process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`
+        : 'http://localhost:3000/reset-password'
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || 'تعذر إرسال رابط إعادة تعيين كلمة المرور.' },
+        { status: 500 }
+      )
     }
 
-    if (user.status === 'pending') {
-      return NextResponse.json({ error: 'حسابك قيد المراجعة' }, { status: 403 })
-    }
-
-    if (user.status === 'rejected') {
-      return NextResponse.json({ error: 'حسابك غير مفعّل' }, { status: 403 })
-    }
-
-    const APP_URL =
-      process.env.NEXT_PUBLIC_APP_URL || 'https://mosaed-arabic.vercel.app'
-
-    const { data: linkData, error: linkError } =
-      await supabaseAdmin.auth.admin.generateLink({
-        type: 'recovery',
-        email,
-        options: { redirectTo: `${APP_URL}/reset-password` },
-      })
-
-    if (linkError) throw linkError
-
-    await sendPasswordResetEmail(email, linkData.properties.action_link)
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+    })
   } catch (error: any) {
-    console.error('Forgot password error:', error)
-    return NextResponse.json({ error: 'حدث خطأ في إرسال الرابط' }, { status: 500 })
+    return NextResponse.json(
+      { error: error?.message || 'حدث خطأ أثناء معالجة الطلب.' },
+      { status: 500 }
+    )
   }
 }

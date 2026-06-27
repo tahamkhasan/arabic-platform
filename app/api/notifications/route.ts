@@ -1,5 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// userId قد يصل كسلسلة حرفية "undefined"/"null" (لا قيمة null فعلية) من واجهات
+// لم تُمرِّر الخاصية بعد — هذا الفحص يصطاد تلك الحالة، بخلاف !userId وحدها
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isValidUserId(userId: string | null): userId is string {
+  return !!userId && userId !== 'undefined' && userId !== 'null' && UUID_RE.test(userId)
+}
 
 // GET /api/notifications?userId=xxx
 export async function GET(req: NextRequest) {
@@ -8,7 +15,9 @@ export async function GET(req: NextRequest) {
     const userId     = searchParams.get('userId')
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
-    if (!userId) return NextResponse.json({ notifications: [], unread: 0 })
+    if (!isValidUserId(userId)) {
+      return NextResponse.json({ notifications: [], unread: 0 })
+    }
 
     // عدد غير المقروءة
     const { count } = await supabaseAdmin
@@ -41,8 +50,8 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, type, title, body, link } = await req.json()
 
-    if (!userId || !type || !title) {
-      return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 })
+    if (!isValidUserId(userId) || !type || !title) {
+      return NextResponse.json({ error: 'بيانات ناقصة أو userId غير صالح' }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin
@@ -64,7 +73,9 @@ export async function PATCH(req: NextRequest) {
   try {
     const { userId, notificationId } = await req.json()
 
-    if (!userId) return NextResponse.json({ error: 'userId مطلوب' }, { status: 400 })
+    if (!isValidUserId(userId)) {
+      return NextResponse.json({ error: 'userId مطلوب وصالح' }, { status: 400 })
+    }
 
     let query = supabaseAdmin
       .from('notifications')

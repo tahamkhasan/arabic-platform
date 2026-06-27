@@ -2,39 +2,47 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PublicHeader from '@/components/PublicHeader'
+import { BRAND } from '@/lib/constants/theme'
+import CurriculumExplorer from '@/components/landing/CurriculumExplorer'
+import AnimatedStat from '@/components/landing/AnimatedStat'
+import PlanPicker from '@/components/landing/PlanPicker'
 
-// ══ هوية مِداد — الألوان المستخرجة من الشعار ══
+// ══ هوية مِدَاد — مُشتقّة بالكامل من lib/constants/theme.ts (المصدر الحقيقي الوحيد) ══
+// نفس أسماء المفاتيح المحلية القديمة عمداً — لا حاجة لتغيير أي استخدام B.xxx أدناه
 const B = {
-  deep:        '#780F1E',
-  red:         '#961E2D',
-  crimson:     '#C32D2D',
-  orange:      '#D2692D',
-  amber:       '#E1782D',
-  gold:        '#E1873C',
-  text:        '#231B19',
-  sub:         '#6B5050',
-  muted:       '#9A8080',
-  bg:          '#F7F2EA',
-  bgSoft:      '#FCF8F2',
-  card:        'rgba(255,255,255,0.72)',
-  border:      'rgba(150,30,45,0.12)',
-  borderStrong:'rgba(150,30,45,0.24)',
-  gradMain:    'linear-gradient(135deg,#780F1E,#C32D2D,#D2692D)',
-  gradWarm:    'linear-gradient(135deg,#780F1E,#961E2D,#E1873C)',
-  gradGold:    'linear-gradient(135deg,#D2692D,#E1873C)',
-  gradBlue:    'linear-gradient(135deg,#2563EB,#1D4ED8)',
-  shadow:      '0 20px 50px rgba(120,15,30,0.08)',
-  shadowWarm:  '0 8px 24px rgba(150,30,45,0.18)',
-  shadowBlue:  '0 8px 28px rgba(37,99,235,0.42)',
+  deep:         BRAND.deep,
+  red:          BRAND.red,
+  crimson:      BRAND.crimson,
+  orange:       BRAND.orange,
+  amber:        BRAND.orangeRed, // لا "amber" في BRAND — أقرب درجة تحافظ على التمييز الثلاثي
+  gold:         BRAND.gold,
+  text:         BRAND.text,
+  sub:          BRAND.sub,
+  muted:        BRAND.muted,
+  bg:           BRAND.bg,
+  bgSoft:       BRAND.bgSoft,
+  card:         BRAND.bgCard,
+  border:       BRAND.border,
+  borderStrong: BRAND.borderStrong,
+  gradMain:     BRAND.gradMain,
+  gradWarm:     BRAND.gradWarm,
+  gradGold:     BRAND.gradGold,
+  gradBlue:     BRAND.gradBlue,
+  shadow:       BRAND.shadow,
+  shadowWarm:   BRAND.shadowWarm,
+  shadowBlue:   BRAND.shadowBlue,
 }
-const CALIBRI = "'Calibri','Trebuchet MS','Gill Sans MT',Tahoma,sans-serif"
-const CAIRO   = "'Cairo','Segoe UI',Tahoma,Arial,sans-serif"
+const CALIBRI = BRAND.fontHeading
+const CAIRO   = BRAND.fontBody
+
+type PublicStats = { subjects: number; lessons: number; teachers: number }
 
 export default function LandingPage() {
   const router = useRouter()
   const [scrollY, setScrollY] = useState(0)
   const [visible, setVisible] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState('/logo-midad.png')
+  const [stats, setStats] = useState<PublicStats>({ subjects: 0, lessons: 0, teachers: 0 })
   const refs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
@@ -47,6 +55,14 @@ export default function LandingPage() {
     fetch('/api/platform-settings')
       .then(r => r.json())
       .then(d => { if (d.settings?.logo_url) setLogoUrl(d.settings.logo_url) })
+      .catch(() => {})
+  }, [])
+
+  // جديد — أرقام حقيقية للمنصة (عامة، بلا أي بيانات شخصية)
+  useEffect(() => {
+    fetch('/api/public-stats')
+      .then(r => r.json())
+      .then(d => setStats({ subjects: d.subjects ?? 0, lessons: d.lessons ?? 0, teachers: d.teachers ?? 0 }))
       .catch(() => {})
   }, [])
 
@@ -73,7 +89,7 @@ export default function LandingPage() {
 
   const Logo = ({ h = 44 }: { h?: number }) => (
     <img
-      src={logoUrl} alt="مِداد" height={h}
+      src={logoUrl} alt="مِدَاد" height={h}
       style={{ height: h, width: 'auto', objectFit: 'contain', display: 'block' }}
       onError={e => { (e.target as HTMLImageElement).src = '/logo-midad.png' }}
     />
@@ -138,7 +154,7 @@ export default function LandingPage() {
           <div>
             <div className="tiny-label" style={{ marginBottom:26 }}>
               <span className="dot" />
-              للمعلم والمتعلم في اللغة العربية 🇰🇼
+              للمُعلِّم والمُتعلِّم
             </div>
 
             <h1 style={{
@@ -146,10 +162,10 @@ export default function LandingPage() {
               fontFamily: CALIBRI, fontWeight: 900, lineHeight: 1.2,
               color: B.text, marginBottom: 20,
             }}>
-              منصة عربية ذكية
-              <span style={{ color: B.crimson }}> تنظّم الشرح </span>
-              وتدعم التدريب
-              <span style={{ color: B.amber }}> وتوضّح التقدّم</span>
+              منصةٌ ذكية
+              <span style={{ color: B.crimson }}> شروحٌ وافية  </span>
+               تدريبٌ مستمر
+              <span style={{ color: B.amber }}> متابعةٌ دقيقةٌ </span>
             </h1>
 
             <p style={{
@@ -157,18 +173,22 @@ export default function LandingPage() {
               lineHeight: 1.95, color: B.sub,
               maxWidth: 620, marginBottom: 30,
             }}>
-              مِداد منصة تعليمية متخصصة للغة العربية، تمكّن المعلم من إعداد الشرح والخطة
-              والاختبار وورقة العمل، وتمنح المتعلم تدريباً أوضح وتجربة أكثر تفاعلاً.
+              مِداد منصة تعليمية ، تمكّن المُعلمَ من إعداد الشروح والخطط 
+              والاختبارات وأوراق العمل، وتمنحُ المُتعلمَ تدريباً مستمراً وتجربةً أكثرَ تفاعلاً.
             </p>
 
             <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:28 }}>
-              <button onClick={() => router.push('/login')} className="btn btn-blue"
+              <button onClick={() => {
+                  document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' })
+                }} className="btn btn-blue"
                 style={{ padding:'15px 30px', borderRadius:14, fontSize:16, fontWeight:900 }}>
-                ابدأ مع مِداد
+                ابدأ مع مِدَاد
               </button>
-              <button onClick={() => router.push('/login')} className="btn btn-ghost"
+              <button onClick={() => {
+                  document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' })
+                }} className="btn btn-ghost"
                 style={{ padding:'15px 24px', borderRadius:14, fontSize:15, fontWeight:800 }}>
-                دخول المستخدمين
+                🔍 استكشف المنهج أولاً
               </button>
             </div>
 
@@ -225,22 +245,81 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ══ جديد: استكشف المنهج فعلياً قبل التسجيل ══ */}
+      <section id="explore" ref={setRef('explore') as any} className="section" style={{ paddingTop: 40, background: 'rgba(255,255,255,0.28)' }}>
+        <div className="container">
+          <div style={{ textAlign: 'center', marginBottom: 44, ...anim('explore') }}>
+            <div className="tiny-label" style={{ marginBottom: 18 }}>
+              <span className="dot" />
+              بلا تسجيل، بلا انتظار
+            </div>
+            <h2 style={{ fontSize: 38, fontWeight: 900, fontFamily: CALIBRI, marginBottom: 12 }}>
+              تصفّح المنهج بنفسك الآن
+            </h2>
+            <p style={{ fontSize: 16, color: B.sub, maxWidth: 560, margin: '0 auto', lineHeight: 1.9 }}>
+              اختر مرحلتك، وتجوّل في المواد والوحدات والدروس الحقيقية المتاحة على المنصة — قبل أن تُنشئ حسابك.
+            </p>
+          </div>
+          <CurriculumExplorer />
+        </div>
+      </section>
+
+      {/* ══ جديد: اختر باقتك أو مادتك ثم سجّل ══ */}
+      <section id="plans" ref={setRef('plans') as any} className="section">
+        <div className="container">
+          <div style={{ textAlign: 'center', marginBottom: 44, ...anim('plans') }}>
+            <div className="tiny-label" style={{ marginBottom: 18 }}>
+              <span className="dot" />
+              الخطوة الأولى نحو حسابك
+            </div>
+            <h2 style={{ fontSize: 38, fontWeight: 900, fontFamily: CALIBRI, marginBottom: 12 }}>
+              اختر باقتك أو مادتك أولاً
+            </h2>
+            <p style={{ fontSize: 16, color: B.sub, maxWidth: 580, margin: '0 auto', lineHeight: 1.9 }}>
+              حدّد الباقة الشاملة أو المادة المستقلة التي تناسبك، وسننتقل بك مباشرة لإنشاء حسابك
+              بهذا الاختيار محفوظاً تلقائياً — دون أي خطوة إضافية لاحقاً.
+            </p>
+          </div>
+          <PlanPicker />
+        </div>
+      </section>
+
+      {/* ══ جديد: بالأرقام ══ */}
+      <section className="section" style={{ paddingTop: 56, paddingBottom: 56 }}>
+        <div className="container">
+          <div
+            className="glass"
+            style={{
+              borderRadius: 28,
+              padding: '40px 28px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3,1fr)',
+              gap: 24,
+            }}
+          >
+            <AnimatedStat icon="📚" value={stats.subjects} label="مادة متاحة" color={B.crimson} />
+            <AnimatedStat icon="📖" value={stats.lessons} label="درس جاهز" color={B.amber} />
+            <AnimatedStat icon="👨‍🏫" value={stats.teachers} label="معلم متخصص" color={B.gold} />
+          </div>
+        </div>
+      </section>
+
       {/* ══ المزايا ══ */}
-      <section id="features" ref={setRef('features') as any} className="section" style={{ background:'rgba(255,255,255,0.28)' }}>
+      <section id="features" ref={setRef('features') as any} className="section">
         <div className="container">
           <div style={{ textAlign:'center', marginBottom:52, ...anim('features') }}>
-            <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:12 }}>ما الذي تقدّمه مِداد؟</h2>
+            <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:12 }}>ما الذي تقدّمه مِدَاد؟</h2>
             <p style={{ fontSize:16, color:B.sub, maxWidth:540, margin:'0 auto', lineHeight:1.9 }}>
-              ثلاثة محاور أساسية تخدم المعلّم والمتعلّم في اللغة العربية
+              ثلاثة محاور أساسية تخدم المُعَلِّم والمُتَعَلِّم   
             </p>
           </div>
           <div className="grid-3">
             {[
-              { icon:'💡', c:B.crimson, num:'01', title:'شرح وخطة وورقة عمل',
+              { icon:'💡', c:B.crimson, num:'01', title:'الشروح والخطط وأوراق العمل',
                 desc:'للمعلم أدوات جاهزة لإعداد الشرح والخطة والأنشطة التعليمية بطريقة أسرع وأكثر تنظيماً.' },
-              { icon:'🎯', c:B.orange,  num:'02', title:'اختبارات وتدريب تفاعلي',
-                desc:'للمتعلم تجربة تدريب أقرب للفهم والتطبيق، لا مجرد قراءة جامدة أو حفظ مباشر.' },
-              { icon:'📊', c:B.gold,    num:'03', title:'متابعة أوضح للتقدّم',
+              { icon:'🎯', c:B.orange,  num:'02', title:'الاختبارات والتدريبات التفاعلية',
+                desc:'للمتعلم تجربة تعينك على الفهم من خلال التطبيق، لا مجرد قراءة جامدة أو حفظ مباشر.' },
+              { icon:'📊', c:B.gold,    num:'03', title:'متابعة دقيقة لتقدم الطالب وتطور مستواه',
                 desc:'التقييم والتغذية الراجعة ومتابعة أثر التعلم تجتمع في مكان واحد لدعم القرار.' },
             ].map((f,i) => (
               <div key={f.title} id={`f${i}`} ref={setRef(`f${i}`) as any}
@@ -258,7 +337,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ كيف تعمل ══ */}
-      <section id="how" ref={setRef('how') as any} className="section">
+      <section id="how" ref={setRef('how') as any} className="section" style={{ background:'rgba(255,255,255,0.28)' }}>
         <div className="container">
           <div style={{ textAlign:'center', marginBottom:52, ...anim('how') }}>
             <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:12 }}>كيف تعمل مِداد؟</h2>
@@ -285,12 +364,12 @@ export default function LandingPage() {
       </section>
 
       {/* ══ لمن صُممت ══ */}
-      <section id="roles" ref={setRef('roles') as any} className="section" style={{ background:'rgba(255,255,255,0.28)' }}>
+      <section id="roles" ref={setRef('roles') as any} className="section">
         <div className="container">
           <div style={{ textAlign:'center', marginBottom:52, ...anim('roles') }}>
             <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:12 }}>صُممت لمن؟</h2>
             <p style={{ fontSize:16, color:B.sub, maxWidth:500, margin:'0 auto', lineHeight:1.9 }}>
-              مِداد تخدم المعلم والمتعلم، وتتوسع لتشمل المدرسة كاملاً
+              مِدَاد تَخدم المعلمََ والمتعلمَ، وتتوسع لتشملَ الإدارة المدرسية 
             </p>
           </div>
           <div className="grid-3">
@@ -325,18 +404,18 @@ export default function LandingPage() {
       <section id="why" ref={setRef('why') as any} className="section">
         <div className="container" style={{ maxWidth:800, textAlign:'center' }}>
           <div style={{ ...anim('why') }}>
-            <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:18 }}>لماذا مِداد؟</h2>
+            <h2 style={{ fontSize:38, fontWeight:900, fontFamily:CALIBRI, marginBottom:18 }}>لماذا مِدَاد؟</h2>
             <p style={{ fontSize:17, color:B.sub, lineHeight:1.95, marginBottom:48, fontFamily:CALIBRI }}>
-              مِداد اسم يجمع المعلّم والمتعلّم، ويعبّر عن دعمٍ يدوم وأصالةٍ تمتزج بالإبداع.
+              مِدَاد اسم يجمع المُعَلِّم والمُتَعَلِّم، ويعبّر عن دعمٍ يدوم وأصالةٍ تمتزجُ بالإبداع.
             </p>
           </div>
           <div id="letters" ref={setRef('letters') as any}
             style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, maxWidth:680, margin:'0 auto' }}>
             {[
               { l:'م', w:'معلّم · متعلّم', c:B.deep    },
-              { l:'د', w:'دعم · ديمومة',   c:B.crimson },
-              { l:'ا', w:'أصالة · إبداع',  c:B.amber   },
-              { l:'د', w:'دراية · دقة',    c:B.gold    },
+              { l:'د', w:'دعمٌ · ديمومة',   c:B.crimson },
+              { l:'ا', w:'أصالةٌ · إبداع',  c:B.amber   },
+              { l:'د', w:'درايةٌ · دقة',    c:B.gold    },
             ].map((h,i) => (
               <div key={i} style={{
                 padding:'24px 14px', borderRadius:18, textAlign:'center',
@@ -360,14 +439,16 @@ export default function LandingPage() {
               <Logo h={72} />
             </div>
             <h2 style={{ fontSize:'clamp(28px,4vw,44px)', fontWeight:900, fontFamily:CALIBRI, marginBottom:16 }}>
-              ابدأ رحلتك مع مِداد
+              ابدأ رحلتك مع مِدَاد
             </h2>
             <p style={{ color:B.sub, fontSize:17, fontFamily:CALIBRI, lineHeight:1.95, maxWidth:600, margin:'0 auto 32px' }}>
-              سواء كنت معلماً تبحث عن شرح أقوى، أو متعلماً يريد تدريباً أوضح، تمنحك مِداد
-              بيئة عربية ذكية تنظّم التعلم وتواكب التطور وتراقب التقدم خطوة بخطوة.
+              سواء كنت معلماً تبحث عن مصادر تعلم متنوعة، أو متعلماً يريد تدريباً مستمراً، تمنحك مِدَاد
+              بيئة  ذكية تنظّم التعلم وتواكب التطور وتراقب التقدم خطوة بخطوة.
             </p>
             <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
-              <button onClick={() => router.push('/login')} className="btn btn-blue"
+              <button onClick={() => {
+                  document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' })
+                }} className="btn btn-blue"
                 style={{ padding:'16px 36px', borderRadius:14, fontSize:16, fontWeight:900 }}>
                 أنشئ حسابك مجاناً
               </button>
@@ -385,9 +466,9 @@ export default function LandingPage() {
       <footer style={{ background:B.bgSoft, borderTop:`1px solid ${B.border}`, padding:'28px 0 36px' }}>
         <div className="container" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:18, flexWrap:'wrap' }}>
           <Logo h={38} />
-          <div style={{ color:B.sub, fontSize:13 }}>الكويت 🇰🇼 • منصة تعليمية عربية • {new Date().getFullYear()}</div>
+          <div style={{ color:B.sub, fontSize:13 }}>الكويت 🇰🇼 • منصة تعليمية  • {new Date().getFullYear()}</div>
           <div style={{ display:'flex', gap:24, flexWrap:'wrap' }}>
-            {[['#features','المزايا'],['#how','كيف تعمل'],['#roles','لمن'],['#cta','ابدأ']].map(([href,label]) => (
+            {[['#explore','استكشف المنهج'],['#plans','اختر باقتك'],['#features','المزايا'],['#how','كيف تعمل'],['#roles','لمن'],['#cta','ابدأ']].map(([href,label]) => (
               <a key={href} href={href} className="nav-a" style={{ fontSize:14 }}>{label}</a>
             ))}
           </div>

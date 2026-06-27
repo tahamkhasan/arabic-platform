@@ -1,6 +1,6 @@
-// lib/notify.ts — دالة مساعدة لإرسال الإشعارات
+﻿// lib/notify.ts — دالة مساعدة لإرسال الإشعارات
 
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 interface NotifyParams {
   userId: string

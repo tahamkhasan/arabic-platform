@@ -2,21 +2,65 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ar } from '@/lib/constants/ar'
+import { BRAND } from '@/lib/constants/theme'
+import { supabase } from '@/lib/supabase'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 
 const c = ar.common
 
-interface User       { id: string; name: string; role: string; user_type: string; theme_color?: string; theme_mode?: string }
+interface User       { id: string; name: string; role: string; user_type: string; status?: string; theme_color?: string; theme_mode?: string; allowed_stages?: string[] }
 interface Subject    { id: string; name: string; icon?: string; grade?: string }
 interface Student    { id: string; name: string; email: string; allowed_grades?: string[] }
-interface GroupMember { id: string; student_id: string; users: { id: string; name: string; email: string } }
-interface Group      { id: string; name: string; subject_id: string; level: string; created_at: string; group_members: GroupMember[] }
-interface Assignment { id: string; title: string; content: string; tool: string; deadline?: string; max_grade: number; target_type: string; created_at: string }
+
+interface ClassStudent {
+  member_id: string
+  student_id: string
+  full_name: string
+  email: string | null
+  grade: string | null
+  avg_score?: number | null
+  joined_at: string
+}
+interface ClassItem {
+  id: string
+  name: string
+  level: string | null
+  subject_id: string | null
+  subject_name: string | null
+  students_count: number
+  open_assignments?: number
+  created_at: string
+}
+interface ClassDetail extends ClassItem {
+  students: ClassStudent[]
+}
+
+// ── جديد: اختبار منشور متاح للربط بمهمة ──────────────────────────
+interface QuizOption {
+  id: string
+  title: string
+  published: boolean
+  questions_count: number
+}
+
+// ── مُعاد بناؤه: مهمة الآن غلاف حول اختبار، لا نص حر ─────────────
+interface Assignment {
+  id: string
+  title: string
+  description?: string | null
+  quiz_id: string
+  quiz_title?: string | null
+  questions_count?: number
+  target_type: 'all' | 'class' | 'student'
+  due_date?: string | null
+  created_at: string
+}
+
 interface Submission { id: string; assignment_id: string; student_id: string; answer_text: string; submitted_at: string; ai_grade?: number; ai_feedback?: string; teacher_grade?: number; teacher_feedback?: string; status: string; users?: { name: string; email: string } }
 interface Media      { id: string; title: string; type: 'video' | 'audio'; url: string; embed_url?: string; link_type: string; thumbnail?: string; subject_id: string; created_at: string }
 interface Message    { id: string; from_id: string; to_id: string; content: string; image_url?: string; is_read: boolean; created_at: string }
 
-type Tab = 'assignments' | 'groups' | 'submissions' | 'media' | 'messages' | 'students' | 'stats'
+type Tab = 'assignments' | 'classes' | 'submissions' | 'media' | 'messages' | 'students' | 'stats'
 
 interface Stats {
   summary: {
@@ -36,12 +80,12 @@ interface Stats {
 }
 
 const THEME_COLORS = [
-  { name: 'ذهبي',    value: '#f9d423', gradient: 'linear-gradient(135deg,#f9d423,#ff4e50)' },
-  { name: 'أزرق',    value: '#4facfe', gradient: 'linear-gradient(135deg,#4facfe,#00f2fe)' },
-  { name: 'أخضر',    value: '#43e97b', gradient: 'linear-gradient(135deg,#43e97b,#38f9d7)' },
-  { name: 'بنفسجي',  value: '#a78bfa', gradient: 'linear-gradient(135deg,#a78bfa,#ec4899)' },
-  { name: 'برتقالي', value: '#f97316', gradient: 'linear-gradient(135deg,#f97316,#ef4444)' },
-  { name: 'وردي',    value: '#ec4899', gradient: 'linear-gradient(135deg,#ec4899,#8b5cf6)' },
+  { name: 'عنابي',     value: BRAND.deep,      gradient: BRAND.gradWarm },
+  { name: 'أحمر مِداد', value: BRAND.red,       gradient: `linear-gradient(135deg,${BRAND.red},${BRAND.crimson})` },
+  { name: 'قرمزي',     value: BRAND.crimson,   gradient: `linear-gradient(135deg,${BRAND.crimson},${BRAND.orangeRed})` },
+  { name: 'برتقالي أحمر', value: BRAND.orangeRed, gradient: `linear-gradient(135deg,${BRAND.orangeRed},${BRAND.orange})` },
+  { name: 'برتقالي',   value: BRAND.orange,    gradient: BRAND.gradGold },
+  { name: 'ذهبي',      value: BRAND.gold,      gradient: `linear-gradient(135deg,${BRAND.orange},${BRAND.gold})` },
 ]
 
 function getEmbedUrl(url: string): string | null {
@@ -59,13 +103,16 @@ export default function TeacherPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [user,         setUser]         = useState<User | null>(null)
-  const [themeColor,   setThemeColor]   = useState('#f9d423')
+  const [themeColor,   setThemeColor]   = useState<string>(BRAND.red)
+  const [themeMode,    setThemeMode]    = useState<'light' | 'dark'>('light')
   const [showSettings, setShowSettings] = useState(false)
   const [tab,          setTab]          = useState<Tab>('assignments')
 
+  const [accessToken, setAccessToken] = useState('')
+
   const [subjects,    setSubjects]    = useState<Subject[]>([])
   const [students,    setStudents]    = useState<Student[]>([])
-  const [groups,      setGroups]      = useState<Group[]>([])
+  const [classes,     setClasses]     = useState<ClassItem[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [media,       setMedia]       = useState<Media[]>([])
@@ -73,29 +120,29 @@ export default function TeacherPage() {
   const [stats,       setStats]       = useState<Stats | null>(null)
   const [statsLoading,setStatsLoading]= useState(false)
 
-  // ── نموذج المهمة ──────────────────────────────────────────────
-  const [aTitle,    setATitle]    = useState('')
-  const [aContent,  setAContent]  = useState('')
-  const [aSubject,  setASubject]  = useState('')
-  const [aTarget,   setATarget]   = useState<'all'|'group'|'student'>('all')
-  const [aTargetId, setATargetId] = useState('')
-  const [aDeadline, setADeadline] = useState('')
-  const [aGrade,    setAGrade]    = useState(10)
-  const [sendingA,  setSendingA]  = useState(false)
-  const [aDone,     setADone]     = useState(false)
+  // ── مُعاد بناؤه بالكامل: نموذج المهمة الجديد (اختبار + استهداف) ──
+  const [quizzesList, setQuizzesList] = useState<QuizOption[]>([])
+  const [aTitle,       setATitle]       = useState('')
+  const [aDescription, setADescription] = useState('')
+  const [aQuizId,      setAQuizId]      = useState('')
+  const [aTarget,      setATarget]      = useState<'all'|'class'|'student'>('all')
+  const [aTargetIds,   setATargetIds]   = useState<string[]>([])
+  const [aDeadline,    setADeadline]    = useState('')
+  const [sendingA,     setSendingA]     = useState(false)
+  const [aDone,        setADone]        = useState(false)
+  const [aError,       setAError]       = useState('')
 
-  // ── نموذج المجموعة ────────────────────────────────────────────
   const [gName,       setGName]       = useState('')
   const [gSubject,    setGSubject]    = useState('')
-  const [gLevel,      setGLevel]      = useState('all')
-  const [gStudents,   setGStudents]   = useState<string[]>([])
+  const [gLevel,      setGLevel]      = useState('')
   const [creatingG,   setCreatingG]   = useState(false)
   const [gDone,       setGDone]       = useState(false)
   const [showNewG,    setShowNewG]    = useState(false)
-  const [openGroup,   setOpenGroup]   = useState<Group | null>(null)
+  const [openClass,   setOpenClass]   = useState<ClassDetail | null>(null)
+  const [loadingClassDetail, setLoadingClassDetail] = useState(false)
   const [addingMember,setAddingMember]= useState(false)
+  const [classError,  setClassError]  = useState('')
 
-  // ── نموذج الوسائط ─────────────────────────────────────────────
   const [mTitle,     setMTitle]     = useState('')
   const [mType,      setMType]      = useState<'video'|'audio'>('video')
   const [mSubject,   setMSubject]   = useState('')
@@ -107,149 +154,234 @@ export default function TeacherPage() {
   const [mError,     setMError]     = useState('')
   const [openMedia,  setOpenMedia]  = useState<Media | null>(null)
 
-  // ── مراجعة الإجابات ───────────────────────────────────────────
   const [openSub,    setOpenSub]    = useState<Submission | null>(null)
   const [tGrade,     setTGrade]     = useState('')
   const [tFeedback,  setTFeedback]  = useState('')
   const [reviewing,  setReviewing]  = useState(false)
   const [reviewDone, setReviewDone] = useState(false)
 
-  // ── الرسائل ───────────────────────────────────────────────────
   const [selStudent, setSelStudent] = useState<Student | null>(null)
   const [msgList,    setMsgList]    = useState<Message[]>([])
   const [newMsg,     setNewMsg]     = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
 
-  // ── تحميل المستخدم ────────────────────────────────────────────
   useEffect(() => {
-    const saved = localStorage.getItem('mosaed_user')
-    if (!saved) { router.replace('/'); return }
-    try {
-      const u = JSON.parse(saved) as User
-      if (u.user_type === 'student') { router.replace('/student'); return }
-      setUser(u)
+      const saved = localStorage.getItem('mosaed_user')
+      if (!saved) { router.replace('/'); return }
+      try {
+        const u = JSON.parse(saved) as User
+        if (u.user_type === 'student') { router.replace('/student'); return }
+        if (u.status === 'pending' || u.status === 'suspended') {
+         router.replace('/pending-approval')
+      return
+    }
+    setUser(u)
       if (u.theme_color) setThemeColor(u.theme_color)
+      if (u.theme_mode === 'dark') setThemeMode('dark')
     } catch { router.replace('/') }
   }, [router])
 
-
   useEffect(() => {
     if (!user) return
-    fetch('/api/subjects').then(r => r.json()).then(d => setSubjects(d.subjects ?? []))
-    fetch('/api/users?userType=student').then(r => r.json()).then(d => setStudents(d.users ?? []))
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.access_token) setAccessToken(data.session.access_token)
+    })
   }, [user])
 
   useEffect(() => {
     if (!user) return
-    if (tab === 'assignments') fetch(`/api/assignments?teacherId=${user.id}`).then(r => r.json()).then(d => setAssignments(d.assignments ?? []))
-    if (tab === 'groups')      fetch(`/api/groups?teacherId=${user.id}`).then(r => r.json()).then(d => setGroups(d.groups ?? []))
+
+    const params = new URLSearchParams()
+    if (user.allowed_stages?.length) {
+      params.set('stages', user.allowed_stages.join(','))
+    }
+    params.set('teacherId', user.id)
+
+    fetch(`/api/subjects?${params.toString()}`).then(r => r.json()).then(d => setSubjects(d.subjects ?? []))
+  }, [user])
+
+  useEffect(() => {
+    if (!accessToken) return
+    fetch('/api/students', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(r => r.json())
+      .then(d => setStudents((d.students ?? []).map((s: any) => ({ id: s.id, name: s.name, email: s.email, allowed_grades: s.allowed_grades }))))
+      .catch(() => setStudents([]))
+  }, [accessToken])
+
+  function loadClasses() {
+    if (!accessToken) return
+    fetch('/api/classes', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(r => r.json())
+      .then(d => setClasses(d.items ?? d.data?.items ?? []))
+      .catch(() => setClasses([]))
+  }
+
+  // ── جديد: جلب اختبارات المعلم المنشورة لاستخدامها في نموذج المهمة ──
+  useEffect(() => {
+    if (!accessToken || tab !== 'assignments') return
+    fetch('/api/quizzes?status=published&page_size=100', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(r => r.json())
+      .then(d => setQuizzesList(d.data?.items ?? d.items ?? []))
+      .catch(() => setQuizzesList([]))
+  }, [accessToken, tab])
+
+  useEffect(() => {
+    if (!user || !accessToken) return
+    if (tab === 'assignments') {
+      fetch(`/api/assignments?teacherId=${user.id}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        .then(r => r.json()).then(d => setAssignments(d.assignments ?? []))
+    }
+    if (tab === 'classes')     loadClasses()
     if (tab === 'submissions') fetch(`/api/submissions?teacherId=${user.id}`).then(r => r.json()).then(d => setSubmissions(d.submissions ?? []))
     if (tab === 'media')       fetch(`/api/teacher-media?teacherId=${user.id}`).then(r => r.json()).then(d => setMedia(d.media ?? []))
     if (tab === 'messages')    fetch(`/api/messages?userId=${user.id}&unreadOnly=true`).then(r => r.json()).then(d => setUnread(d.unread ?? 0))
     if (tab === 'stats') {
       setStatsLoading(true)
-      fetch(`/api/stats?teacherId=${user.id}`)
+      fetch(`/api/stats?teacherId=${user.id}`, { headers: { Authorization: `Bearer ${accessToken}` } })
         .then(r => r.json()).then(d => setStats(d))
         .finally(() => setStatsLoading(false))
     }
-  }, [user, tab])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, tab, accessToken])
 
   useEffect(() => {
     if (!user || !selStudent) return
     fetch(`/api/messages?userId=${user.id}&otherId=${selStudent.id}`).then(r => r.json()).then(d => setMsgList(d.messages ?? []))
   }, [user, selStudent])
 
-  const bg        = '#F5F0E8'
-  const cardBg    = '#FDFAF5'
-  const textCol   = '#1A1221'
-  const subCol    = '#6B5050'
-  const borderCol = 'rgba(192,57,43,0.15)'
-  const inputBg   = 'rgba(192,57,43,0.05)'
-  const headerBg  = 'rgba(245,240,232,0.97)'
+  const isDark = themeMode === 'dark'
+
+  const bg        = isDark ? '#1A1612' : BRAND.bg
+  const cardBg    = isDark ? '#241F1A' : BRAND.bgSoft
+  const textCol   = isDark ? '#F5EFE6' : BRAND.text
+  const subCol    = isDark ? '#B5A99C' : BRAND.sub
+  const borderCol = isDark ? 'rgba(220,100,40,0.18)' : BRAND.border
+  const inputBg   = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(140,20,40,0.04)'
+  const headerBg  = isDark ? 'rgba(26,22,18,0.94)' : 'rgba(247,242,234,0.97)'
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px', borderRadius: 12,
     border: `1.5px solid ${borderCol}`, background: inputBg,
     color: textCol, fontSize: 14, fontFamily: 'inherit',
-    colorScheme: 'light',
+    colorScheme: themeMode,
   }
 
-  // ── إرسال مهمة ────────────────────────────────────────────────
+  // ── مُعاد بناؤه بالكامل: إرسال مهمة جديدة (اختبار + استهداف) ──────
   async function sendAssignment() {
-    if (!user || !aTitle.trim() || !aContent.trim()) return
+    if (!user || !accessToken || !aTitle.trim() || !aQuizId) return
+    if ((aTarget === 'class' || aTarget === 'student') && aTargetIds.length === 0) {
+      setAError(aTarget === 'class' ? 'اختر فصلاً واحداً على الأقل.' : 'اختر طالباً واحداً على الأقل.')
+      return
+    }
     setSendingA(true)
+    setAError('')
     try {
       const res = await fetch('/api/assignments', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teacherId: user.id, subjectId: aSubject || null, title: aTitle, content: aContent, tool: 'worksheet', targetType: aTarget, targetId: aTargetId || null, deadline: aDeadline || null, maxGrade: aGrade }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          teacherId: user.id,
+          quizId: aQuizId,
+          title: aTitle.trim(),
+          description: aDescription.trim() || undefined,
+          targetType: aTarget,
+          targetIds: aTargetIds,
+          dueDate: aDeadline || null,
+        }),
       })
-      if (res.ok) {
-        setADone(true); setATitle(''); setAContent(''); setASubject('')
-        setATarget('all'); setATargetId(''); setADeadline('')
-        setTimeout(() => setADone(false), 3000)
-        fetch(`/api/assignments?teacherId=${user.id}`).then(r => r.json()).then(d => setAssignments(d.assignments ?? []))
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setAError(data?.error || 'فشل إرسال المهمة.')
+        return
       }
-    } finally { setSendingA(false) }
+      setADone(true); setATitle(''); setADescription(''); setAQuizId('')
+      setATarget('all'); setATargetIds([]); setADeadline('')
+      setTimeout(() => setADone(false), 3000)
+      fetch(`/api/assignments?teacherId=${user.id}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        .then(r => r.json()).then(d => setAssignments(d.assignments ?? []))
+    } catch {
+      setAError('تعذّر الاتصال بالخادم.')
+    } finally {
+      setSendingA(false)
+    }
   }
 
-  // ── إنشاء مجموعة ──────────────────────────────────────────────
-  async function createGroup() {
-    if (!user || !gName.trim()) return
+  async function createClass() {
+    if (!user || !accessToken || !gName.trim()) return
     setCreatingG(true)
+    setClassError('')
     try {
-      const res = await fetch('/api/groups', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teacherId: user.id, name: gName, subjectId: gSubject || null, level: gLevel, studentIds: gStudents }),
+      const res = await fetch('/api/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ name: gName, level: gLevel || undefined, subject_id: gSubject || undefined }),
       })
+      const data = await res.json().catch(() => null)
       if (res.ok) {
-        setGDone(true); setGName(''); setGSubject(''); setGStudents([]); setGLevel('all')
-        setTimeout(() => { setGDone(false); setShowNewG(false) }, 2000)
-        fetch(`/api/groups?teacherId=${user.id}`).then(r => r.json()).then(d => setGroups(d.groups ?? []))
+        setGDone(true); setGName(''); setGSubject(''); setGLevel('')
+        setTimeout(() => { setGDone(false); setShowNewG(false) }, 1500)
+        loadClasses()
+      } else {
+        setClassError(data?.error || 'فشل إنشاء الفصل.')
       }
+    } catch {
+      setClassError('تعذّر الاتصال بالخادم.')
     } finally { setCreatingG(false) }
   }
 
-  // ── إضافة طالب لمجموعة ────────────────────────────────────────
-  async function addToGroup(groupId: string, studentId: string) {
+  async function openClassDetail(classId: string) {
+    if (!accessToken) return
+    setLoadingClassDetail(true)
+    try {
+      const res = await fetch(`/api/classes/${classId}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      const data = await res.json().catch(() => null)
+      if (res.ok) setOpenClass(data?.data ?? data)
+    } finally { setLoadingClassDetail(false) }
+  }
+
+  async function addToClass(classId: string, studentId: string) {
+    if (!accessToken) return
     setAddingMember(true)
     try {
-      await fetch('/api/groups', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId, addStudentIds: [studentId] }),
+      await fetch(`/api/classes/${classId}/students`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ student_id: studentId }),
       })
-      fetch(`/api/groups?teacherId=${user?.id}`).then(r => r.json()).then(d => {
-        setGroups(d.groups ?? [])
-        const updated = d.groups?.find((g: Group) => g.id === groupId)
-        if (updated) setOpenGroup(updated)
-      })
+      await openClassDetail(classId)
+      loadClasses()
     } finally { setAddingMember(false) }
   }
 
-  // ── إزالة طالب من مجموعة ──────────────────────────────────────
-  async function removeFromGroup(groupId: string, studentId: string) {
-    await fetch('/api/groups', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId, removeStudentIds: [studentId] }),
+  async function removeFromClass(classId: string, studentId: string) {
+    if (!accessToken) return
+    await fetch(`/api/classes/${classId}/students`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ student_id: studentId }),
     })
-    fetch(`/api/groups?teacherId=${user?.id}`).then(r => r.json()).then(d => {
-      setGroups(d.groups ?? [])
-      const updated = d.groups?.find((g: Group) => g.id === groupId)
-      if (updated) setOpenGroup(updated)
-    })
+    await openClassDetail(classId)
+    loadClasses()
   }
 
-  // ── حذف مجموعة ────────────────────────────────────────────────
-  async function deleteGroup(groupId: string) {
-    if (!confirm('هل تريد حذف هذه المجموعة؟')) return
-    await fetch('/api/groups', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId, teacherId: user?.id }),
+  async function deleteClass(classId: string) {
+    if (!accessToken) return
+    if (!confirm('هل تريد حذف هذا الفصل؟')) return
+    const res = await fetch(`/api/classes/${classId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
     })
-    setOpenGroup(null)
-    fetch(`/api/groups?teacherId=${user?.id}`).then(r => r.json()).then(d => setGroups(d.groups ?? []))
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      alert(data?.error || 'فشل حذف الفصل.')
+      return
+    }
+    setOpenClass(null)
+    loadClasses()
   }
 
-  // ── رفع وسائط ─────────────────────────────────────────────────
   async function uploadMedia() {
     if (!user || !mTitle.trim()) return
     setUploadingM(true); setMError('')
@@ -278,7 +410,6 @@ export default function TeacherPage() {
     finally { setUploadingM(false) }
   }
 
-  // ── مراجعة إجابة ──────────────────────────────────────────────
   async function submitReview() {
     if (!openSub) return
     setReviewing(true)
@@ -295,7 +426,6 @@ export default function TeacherPage() {
     } finally { setReviewing(false) }
   }
 
-  // ── إرسال رسالة ───────────────────────────────────────────────
   async function sendMessage() {
     if (!user || !selStudent || !newMsg.trim()) return
     setSendingMsg(true)
@@ -312,10 +442,24 @@ export default function TeacherPage() {
   async function saveSettings() {
     if (!user) return
     try {
-      await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, theme_color: themeColor, theme_mode: 'light' }) })
-      const updated = { ...user, theme_color: themeColor, theme_mode: 'light' }
+      await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, theme_color: themeColor, theme_mode: themeMode }) })
+      const updated = { ...user, theme_color: themeColor, theme_mode: themeMode }
       setUser(updated); localStorage.setItem('mosaed_user', JSON.stringify(updated))
     } finally { setShowSettings(false) }
+  }
+
+  function toggleThemeMode() {
+    if (!user) return
+    const next = themeMode === 'dark' ? 'light' : 'dark'
+    setThemeMode(next)
+    const updated = { ...user, theme_mode: next }
+    setUser(updated)
+    localStorage.setItem('mosaed_user', JSON.stringify(updated))
+    fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, theme_mode: next }),
+    }).catch(() => {})
   }
 
   function handleLogout() { localStorage.removeItem('mosaed_user'); localStorage.removeItem('mosaed_session'); router.replace('/') }
@@ -326,107 +470,126 @@ export default function TeacherPage() {
 
   const TABS = [
     { id: 'assignments' as Tab, icon: '📝', label: 'مهمة جديدة' },
-    { id: 'groups'      as Tab, icon: '👥', label: 'المجموعات' },
+    { id: 'classes'      as Tab, icon: '🏫', label: 'الفصول' },
     { id: 'submissions' as Tab, icon: '📬', label: 'الإجابات',  badge: pendingReviews },
     { id: 'media'       as Tab, icon: '🎥', label: 'الوسائط' },
     { id: 'messages'    as Tab, icon: '💬', label: 'الرسائل',   badge: unread },
     { id: 'students'    as Tab, icon: '👤', label: 'الطلاب' },
     { id: 'stats'       as Tab, icon: '📊', label: 'تحليلات' },
   ]
-
   return (
-    <div dir="rtl" style={{ minHeight: '100vh', background: bg, color: textCol, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", paddingBottom: 90 }}>
+    <div dir="rtl" style={{ minHeight: '100vh', background: bg, color: textCol, fontFamily: BRAND.fontBody, paddingBottom: 90 }}>
       <style>{`
         * { box-sizing: border-box; } body { margin: 0; }
         @keyframes spin   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.3s ease; }
         textarea:focus, input:focus, select:focus { outline: none; }
-        select option { background-color: ${'#FDFAF5'} !important; color: ${textCol} !important; }
-        select { color-scheme: light; }
+        select option { background-color: ${cardBg} !important; color: ${textCol} !important; }
+        select { color-scheme: ${themeMode}; }
       `}</style>
 
       {/* الرأس */}
       <header style={{ position: 'sticky', top: 0, zIndex: 50, background: headerBg, backdropFilter: 'blur(20px)', borderBottom: `1px solid ${borderCol}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => router.push('/dashboard')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12,
+              border: 'none', background: themeColor, color: '#1a1a2e', fontWeight: 900, fontSize: 14,
+              cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${themeColor}40`, flexShrink: 0,
+            }}
+          >
+            → رجوع
+          </button>
           <span style={{ fontSize: 26 }}>🌙</span>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: themeColor }}>{c.platformName}</div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: themeColor, background: `${themeColor}16`, display: 'inline-block', padding: '2px 10px', borderRadius: 8 }}>
+              {c.platformName}
+            </div>
             <div style={{ fontSize: 13, color: subCol, marginTop: 2 }}>👨‍🏫 {user.name} • معلم</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push('/dashboard')} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${themeColor}44`, background: `${themeColor}15`, color: themeColor, cursor: 'pointer', fontFamily: 'inherit' }}>✨ أدوات التوليد</button>
+          <button onClick={toggleThemeMode} title={isDark ? 'الوضع النهاري' : 'الوضع الليلي'} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontFamily: 'inherit' }}>{isDark ? '☀️' : '🌙'}</button>
           <button onClick={() => setShowSettings(true)} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontFamily: 'inherit' }}>⚙️</button>
-          <button onClick={handleLogout} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: '1.5px solid rgba(252,129,129,0.4)', background: 'rgba(252,129,129,0.1)', color: '#fc8181', cursor: 'pointer', fontFamily: 'inherit' }}>🚪 خروج</button>
+          <button onClick={handleLogout} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid rgba(180,40,40,0.4)`, background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, cursor: 'pointer', fontFamily: 'inherit' }}>🚪 خروج</button>
         </div>
       </header>
 
       <main style={{ maxWidth: 800, margin: '0 auto', padding: '20px 16px' }}>
 
-        {/* ── إرسال مهمة ── */}
+        {/* ── مُعاد بناؤه بالكامل: إرسال مهمة جديدة (اختبار + استهداف) ── */}
         {tab === 'assignments' && (
           <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>📝 إرسال مهمة جديدة</h2>
-            {aDone && <div style={{ padding: '14px', borderRadius: 12, background: 'rgba(67,233,123,0.15)', border: '1px solid rgba(67,233,123,0.4)', color: '#43e97b', fontSize: 14, fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>✅ تم إرسال المهمة بنجاح!</div>}
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, marginBottom: 20 , fontFamily: BRAND.fontHeading }}>📝 إرسال مهمة جديدة</h2>
+
+            {aDone && <div style={{ padding: '14px', borderRadius: 12, background: 'rgba(5,150,105,0.12)', border: '1px solid rgba(5,150,105,0.4)', color: '#059669', fontSize: 14, fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>✅ تم إرسال المهمة بنجاح!</div>}
+            {aError && <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>⚠️ {aError}</div>}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>عنوان المهمة *</label>
-                <input value={aTitle} onChange={e => setATitle(e.target.value)} placeholder="مثال: ورقة عمل النعت" style={inputStyle} />
+                <input value={aTitle} onChange={e => setATitle(e.target.value)} placeholder="مثال: مهمة مراجعة النعت" style={inputStyle} />
               </div>
+
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>المادة</label>
-                <select value={aSubject} onChange={e => setASubject(e.target.value)} style={inputStyle}>
-                  <option value="">-- اختر المادة (اختياري) --</option>
-                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name} {s.grade ? `— الصف ${s.grade}` : ''}</option>)}
+                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>وصف مختصر (اختياري)</label>
+                <input value={aDescription} onChange={e => setADescription(e.target.value)} placeholder="وصف موجز للمهمة" style={inputStyle} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>الاختبار المرتبط *</label>
+                <select value={aQuizId} onChange={e => setAQuizId(e.target.value)} style={inputStyle}>
+                  <option value="">-- اختر اختباراً منشوراً --</option>
+                  {quizzesList.map(q => <option key={q.id} value={q.id}>{q.title} ({q.questions_count} سؤال)</option>)}
                 </select>
+                {quizzesList.length === 0 && (
+                  <p style={{ fontSize: 12, color: subCol, marginTop: 6 }}>لا توجد اختبارات منشورة بعد — أنشئ ونشر اختباراً أولاً من تبويب "🎯 الاختبارات".</p>
+                )}
               </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>محتوى المهمة * (اكتب الأسئلة كاملة)</label>
-                <textarea value={aContent} onChange={e => setAContent(e.target.value)} placeholder="١- عرّف النعت.&#10;٢- اذكر أنواع النعت مع مثال لكل نوع.&#10;٣- أعرب ما تحته خط..." rows={8} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.7 }} />
-                <div style={{ fontSize: 11, color: subCol, marginTop: 4, textAlign: 'left' }}>{aContent.length} حرف</div>
-              </div>
+
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 8 }}>إرسال إلى</label>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                  {([['all', '👥 الجميع'], ['student', '👤 طالب محدد'], ['group', '👨‍👩‍👧 مجموعة']] as const).map(([val, label]) => (
-                    <button key={val} onClick={() => { setATarget(val); setATargetId('') }}
+                  {([['all', '👥 الجميع'], ['student', '👤 طالب محدد'], ['class', '🏫 فصل']] as const).map(([val, label]) => (
+                    <button key={val} onClick={() => { setATarget(val); setATargetIds([]) }}
                       style={{ flex: 1, padding: '10px 8px', borderRadius: 10, border: `2px solid ${aTarget === val ? themeColor : borderCol}`, background: aTarget === val ? `${themeColor}18` : 'transparent', color: aTarget === val ? themeColor : subCol, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                       {label}
                     </button>
                   ))}
                 </div>
+
                 {aTarget === 'student' && (
-                  <select value={aTargetId} onChange={e => setATargetId(e.target.value)} style={inputStyle}>
-                    <option value="">-- اختر الطالب --</option>
+                  <select multiple value={aTargetIds} onChange={e => setATargetIds(Array.from(e.target.selectedOptions, o => o.value))} style={{ ...inputStyle, minHeight: 120 }}>
                     {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.email})</option>)}
                   </select>
                 )}
-                {aTarget === 'group' && (
-                  <select value={aTargetId} onChange={e => setATargetId(e.target.value)} style={inputStyle}>
-                    <option value="">-- اختر المجموعة --</option>
-                    {groups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.group_members?.length ?? 0} طالب)</option>)}
+                {aTarget === 'class' && (
+                  <select multiple value={aTargetIds} onChange={e => setATargetIds(Array.from(e.target.selectedOptions, o => o.value))} style={{ ...inputStyle, minHeight: 120 }}>
+                    {classes.map(g => <option key={g.id} value={g.id}>{g.name} ({g.students_count} طالب)</option>)}
                   </select>
                 )}
+                {(aTarget === 'student' || aTarget === 'class') && (
+                  <p style={{ fontSize: 11, color: subCol, marginTop: 4 }}>اضغط Ctrl (أو Cmd) لاختيار أكثر من عنصر.</p>
+                )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>⏰ الموعد النهائي</label>
-                  <input type="datetime-local" value={aDeadline} onChange={e => setADeadline(e.target.value)} style={inputStyle} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>🎯 الدرجة الكاملة</label>
-                  <input type="number" min={1} max={100} value={aGrade} onChange={e => setAGrade(Number(e.target.value))} style={inputStyle} />
-                </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>⏰ الموعد النهائي (اختياري)</label>
+                <input type="datetime-local" value={aDeadline} onChange={e => setADeadline(e.target.value)} style={inputStyle} />
               </div>
-              <button onClick={sendAssignment} disabled={sendingA || !aTitle.trim() || !aContent.trim()}
-                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (aTitle && aContent) ? `linear-gradient(135deg,${themeColor},#ff4e50)` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: (aTitle && aContent) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+
+              <button onClick={sendAssignment} disabled={sendingA || !aTitle.trim() || !aQuizId}
+                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (aTitle.trim() && aQuizId) ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: (aTitle.trim() && aQuizId) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {sendingA ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الإرسال...</> : '📤 إرسال المهمة'}
               </button>
             </div>
+
             {assignments.length > 0 && (
               <div style={{ marginTop: 32 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: textCol, marginBottom: 14 }}>📋 المهام المرسلة ({assignments.length})</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: textCol, marginBottom: 14 , fontFamily: BRAND.fontHeading }}>📋 المهام المرسلة ({assignments.length})</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {assignments.map(a => (
                     <div key={a.id} style={{ padding: '14px 16px', borderRadius: 14, background: cardBg, border: `1.5px solid ${borderCol}` }}>
@@ -434,8 +597,8 @@ export default function TeacherPage() {
                         <div>
                           <div style={{ fontSize: 15, fontWeight: 800, color: textCol }}>{a.title}</div>
                           <div style={{ fontSize: 12, color: subCol, marginTop: 4 }}>
-                            {a.target_type === 'all' ? '👥 الجميع' : a.target_type === 'student' ? '👤 طالب' : '👨‍👩‍👧 مجموعة'}
-                            {a.deadline && ` • ⏰ ${new Date(a.deadline).toLocaleDateString('ar-KW', { month: 'short', day: 'numeric' })}`}
+                            🎯 {a.quiz_title || 'اختبار'} • {a.questions_count ?? 0} سؤال
+                            {a.due_date && ` • ⏰ ${new Date(a.due_date).toLocaleDateString('ar-KW', { month: 'short', day: 'numeric' })}`}
                           </div>
                         </div>
                         <span style={{ fontSize: 11, color: themeColor, background: `${themeColor}18`, padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>
@@ -450,39 +613,39 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* ── المجموعات ── */}
-        {tab === 'groups' && (
+        {/* ── تبويب "الفصول" (بلا تغيير) ── */}
+        {tab === 'classes' && (
           <div className="fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, margin: 0 }}>👥 المجموعات ({groups.length})</h2>
-              <button onClick={() => setShowNewG(true)}
-                style={{ padding: '10px 20px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${themeColor},#ff4e50)`, color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-                ＋ مجموعة جديدة
+              <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, margin: 0 , fontFamily: BRAND.fontHeading }}>🏫 الفصول ({classes.length})</h2>
+              <button onClick={() => { setShowNewG(true); setClassError('') }}
+                style={{ padding: '10px 20px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                ＋ فصل جديد
               </button>
             </div>
 
-            {groups.length === 0
-              ? <EmptyState icon="👥" title="لا توجد مجموعات بعد" sub="أنشئ مجموعة وأضف طلابك إليها" />
+            {!accessToken ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: subCol }}>⏳ جارٍ تجهيز الجلسة...</div>
+            ) : classes.length === 0
+              ? <EmptyState icon="🏫" title="لا توجد فصول بعد" sub="أنشئ فصلاً وأضف طلابك إليه" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
-                  {groups.map(g => (
+                  {classes.map(g => (
                     <div key={g.id} style={{ padding: '18px 20px', borderRadius: 16, background: cardBg, border: `1.5px solid ${borderCol}`, cursor: 'pointer' }}
-                      onClick={() => setOpenGroup(g)}>
+                      onClick={() => openClassDetail(g.id)}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                        <div style={{ fontSize: 32 }}>👥</div>
+                        <div style={{ fontSize: 32 }}>🏫</div>
                         <span style={{ fontSize: 12, background: `${themeColor}18`, color: themeColor, padding: '3px 10px', borderRadius: 8, fontWeight: 700 }}>
-                          {g.group_members?.length ?? 0} طالب
+                          {g.students_count} طالب
                         </span>
                       </div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: textCol, marginBottom: 6 }}>{g.name}</div>
                       <div style={{ fontSize: 12, color: subCol }}>
-                        {g.level !== 'all' ? `المستوى: ${g.level}` : 'كل المستويات'}
+                        {g.subject_name ? `📚 ${g.subject_name}` : 'بلا مادة محدَّدة'}
+                        {g.level ? ` • ${g.level}` : ''}
                       </div>
-                      {g.group_members?.slice(0, 3).map(m => (
-                        <div key={m.id} style={{ fontSize: 12, color: subCol, marginTop: 4 }}>• {m.users?.name}</div>
-                      ))}
-                      {(g.group_members?.length ?? 0) > 3 && (
-                        <div style={{ fontSize: 12, color: themeColor, marginTop: 4 }}>+{(g.group_members?.length ?? 0) - 3} آخرين</div>
+                      {!!g.open_assignments && (
+                        <div style={{ fontSize: 12, color: themeColor, marginTop: 6 }}>📝 {g.open_assignments} مهمة مفتوحة</div>
                       )}
                     </div>
                   ))}
@@ -491,37 +654,37 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* ── الإجابات ── */}
+        {/* ── الإجابات (بلا تغيير) ── */}
         {tab === 'submissions' && (
           <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>
-              📬 إجابات الطلاب
-              {pendingReviews > 0 && <span style={{ fontSize: 13, marginRight: 10, background: '#f97316', color: '#fff', padding: '2px 10px', borderRadius: 8 }}>{pendingReviews} تحتاج مراجعة</span>}
+            <h2 style={{ fontSize: 20, fontWeight: 900, marginBottom: 20, fontFamily: BRAND.fontHeading }}>
+              <span style={{ color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10 }}>📬 إجابات الطلاب</span>
+              {pendingReviews > 0 && <span style={{ fontSize: 13, marginRight: 10, background: BRAND.orange, color: '#fff', padding: '2px 10px', borderRadius: 8 }}>{pendingReviews} تحتاج مراجعة</span>}
             </h2>
             {submissions.length === 0
-              ? <EmptyState icon="📭" title="لا توجد إجابات بعد" sub="ستظهر إجابات الطلاب هنا" />
+              ? <EmptyState icon="📭" title="لا توجد إجابات بعد" sub="ستظهر إجابات الطلاب هنا" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {submissions.map(sub => {
                     const isPending = sub.status === 'submitted' && !sub.teacher_grade
                     return (
-                      <div key={sub.id} style={{ padding: '16px 18px', borderRadius: 14, background: cardBg, border: `1.5px solid ${isPending ? '#f9741644' : '#43e97b44'}` }}>
+                      <div key={sub.id} style={{ padding: '16px 18px', borderRadius: 14, background: cardBg, border: `1.5px solid ${isPending ? BRAND.orange + '44' : BRAND.gold + '44'}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                           <div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: textCol }}>{sub.users?.name ?? 'طالب'}</div>
                             <div style={{ fontSize: 12, color: subCol, marginTop: 3 }}>{new Date(sub.submitted_at).toLocaleDateString('ar-KW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                           </div>
                           <div style={{ textAlign: 'left' }}>
-                            {sub.ai_grade !== null && sub.ai_grade !== undefined && <div style={{ fontSize: 12, color: '#4facfe', fontWeight: 700 }}>🤖 AI: {sub.ai_grade}</div>}
-                            {sub.teacher_grade !== null && sub.teacher_grade !== undefined && <div style={{ fontSize: 13, color: '#43e97b', fontWeight: 800 }}>✅ {sub.teacher_grade}</div>}
-                            {isPending && <div style={{ fontSize: 12, color: '#f97316', fontWeight: 700 }}>⏳ تحتاج مراجعة</div>}
+                            {sub.ai_grade !== null && sub.ai_grade !== undefined && <div style={{ fontSize: 12, color: BRAND.crimson, fontWeight: 700 }}>🤖 AI: {sub.ai_grade}</div>}
+                            {sub.teacher_grade !== null && sub.teacher_grade !== undefined && <div style={{ fontSize: 13, color: BRAND.gold, fontWeight: 800 }}>✅ {sub.teacher_grade}</div>}
+                            {isPending && <div style={{ fontSize: 12, color: BRAND.orange, fontWeight: 700 }}>⏳ تحتاج مراجعة</div>}
                           </div>
                         </div>
                         <div style={{ padding: '10px 12px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 12, fontSize: 13, color: subCol, lineHeight: 1.6 }}>
                           {sub.answer_text.slice(0, 150)}{sub.answer_text.length > 150 ? '...' : ''}
                         </div>
                         <button onClick={() => { setOpenSub(sub); setTGrade(String(sub.teacher_grade ?? sub.ai_grade ?? '')); setTFeedback(sub.teacher_feedback ?? sub.ai_feedback ?? '') }}
-                          style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: isPending ? `linear-gradient(135deg,${themeColor},#ff4e50)` : `${themeColor}22`, color: isPending ? '#1a1a2e' : themeColor, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: isPending ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : `${themeColor}22`, color: isPending ? '#1a1a2e' : themeColor, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                           {isPending ? '✏️ مراجعة وتصحيح' : '👁️ عرض التفاصيل'}
                         </button>
                       </div>
@@ -532,12 +695,12 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* ── الوسائط ── */}
+        {/* ── الوسائط (بلا تغيير) ── */}
         {tab === 'media' && (
           <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>🎥 إضافة وسائط تعليمية</h2>
-            {mDone && <div style={{ padding: '14px', borderRadius: 12, background: 'rgba(67,233,123,0.15)', border: '1px solid rgba(67,233,123,0.4)', color: '#43e97b', fontSize: 14, fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>✅ تمت الإضافة بنجاح!</div>}
-            {mError && <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(252,129,129,0.12)', border: '1px solid rgba(252,129,129,0.4)', color: '#fc8181', fontSize: 13, marginBottom: 14 }}>⚠️ {mError}</div>}
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, marginBottom: 20 , fontFamily: BRAND.fontHeading }}>🎥 إضافة وسائط تعليمية</h2>
+            {mDone && <div style={{ padding: '14px', borderRadius: 12, background: 'rgba(220,140,60,0.15)', border: '1px solid rgba(220,140,60,0.4)', color: BRAND.gold, fontSize: 14, fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>✅ تمت الإضافة بنجاح!</div>}
+            {mError && <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(180,40,40,0.12)', border: '1px solid rgba(180,40,40,0.4)', color: BRAND.crimson, fontSize: 13, marginBottom: 14 }}>⚠️ {mError}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 32 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>عنوان الوسيط *</label>
@@ -595,20 +758,20 @@ export default function TeacherPage() {
                 )}
               </div>
               <button onClick={uploadMedia} disabled={uploadingM || !mTitle.trim() || (mLinkType === 'link' ? !mUrl.trim() : !mFile)}
-                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (mTitle && (mUrl || mFile)) ? `linear-gradient(135deg,${themeColor},#ff4e50)` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: (mTitle && (mUrl || mFile)) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (mTitle && (mUrl || mFile)) ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: (mTitle && (mUrl || mFile)) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {uploadingM ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الرفع...</> : '📤 إضافة الوسيط'}
               </button>
             </div>
             {media.length > 0 && (
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: textCol, marginBottom: 14 }}>📚 الوسائط المضافة ({media.length})</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: textCol, marginBottom: 14 , fontFamily: BRAND.fontHeading }}>📚 الوسائط المضافة ({media.length})</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
                   {media.map(m => (
                     <button key={m.id} onClick={() => setOpenMedia(m)}
                       style={{ borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${borderCol}`, background: cardBg, cursor: 'pointer', textAlign: 'right', fontFamily: 'inherit', padding: 0 }}>
                       <div style={{ height: 110, background: `${themeColor}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, position: 'relative' }}>
                         {m.link_type === 'link' && m.embed_url?.includes('youtube') ? '▶️' : m.type === 'video' ? '🎬' : '🎵'}
-                        {m.link_type === 'link' && <span style={{ position: 'absolute', top: 8, left: 8, fontSize: 10, background: '#4facfe', color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>🔗</span>}
+                        {m.link_type === 'link' && <span style={{ position: 'absolute', top: 8, left: 8, fontSize: 10, background: BRAND.crimson, color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>🔗</span>}
                       </div>
                       <div style={{ padding: '10px 12px' }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: textCol, marginBottom: 3 }}>{m.title}</div>
@@ -622,10 +785,10 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* ── الرسائل ── */}
+        {/* ── الرسائل (بلا تغيير) ── */}
         {tab === 'messages' && (
           <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>💬 رسائل الطلاب</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, marginBottom: 20 , fontFamily: BRAND.fontHeading }}>💬 رسائل الطلاب</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, minHeight: 400 }}>
               <div style={{ borderRadius: 14, background: cardBg, border: `1.5px solid ${borderCol}`, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 14px', borderBottom: `1px solid ${borderCol}`, fontSize: 13, fontWeight: 700, color: subCol }}>الطلاب ({students.length})</div>
@@ -646,7 +809,7 @@ export default function TeacherPage() {
                   ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: subCol, fontSize: 14 }}>← اختر طالباً لبدء المحادثة</div>
                   : (
                     <>
-                      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${borderCol}`, fontSize: 14, fontWeight: 700, color: themeColor }}>💬 {selStudent.name}</div>
+                      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${borderCol}`, fontSize: 14, fontWeight: 700, color: themeColor, background: `${themeColor}10` }}>💬 {selStudent.name}</div>
                       <div style={{ flex: 1, padding: 14, overflowY: 'auto', maxHeight: 360, display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {msgList.length === 0
                           ? <p style={{ color: subCol, fontSize: 13, textAlign: 'center', margin: 'auto' }}>لا توجد رسائل بعد</p>
@@ -675,12 +838,12 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* ── الطلاب ── */}
+        {/* ── الطلاب (بلا تغيير) ── */}
         {tab === 'students' && (
           <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>👤 الطلاب ({students.length})</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, marginBottom: 20 , fontFamily: BRAND.fontHeading }}>👤 الطلاب ({students.length})</h2>
             {students.length === 0
-              ? <EmptyState icon="👥" title="لا يوجد طلاب بعد" sub="سيظهر الطلاب هنا بعد موافقة المدير" />
+              ? <EmptyState icon="👥" title="لا يوجد طلاب بعد" sub="سيظهر الطلاب هنا بعد موافقة المدير" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
                   {students.map(s => (
@@ -700,11 +863,10 @@ export default function TeacherPage() {
           </div>
         )}
       </main>
-
-        {/* ── التحليلات ── */}
+        {/* ── التحليلات (بلا تغيير في المنطق، فقط بيانات الخادم الجديدة) ── */}
         {tab === 'stats' && (
-          <div className="fade-in">
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, marginBottom: 20 }}>📊 تحليلات الأداء</h2>
+          <div className="fade-in" style={{ maxWidth: 800, margin: '0 auto', padding: '20px 16px' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, marginBottom: 20 , fontFamily: BRAND.fontHeading }}>📊 تحليلات الأداء</h2>
 
             {statsLoading ? (
               <div style={{ textAlign: 'center', padding: '60px 0', color: subCol }}>
@@ -712,18 +874,17 @@ export default function TeacherPage() {
                 <p style={{ margin: 0 }}>جارٍ تحميل التحليلات...</p>
               </div>
             ) : !stats ? (
-              <EmptyState icon="📊" title="لا توجد بيانات بعد" sub="أرسل مهاماً وصحّح إجابات لترى التحليلات" />
+              <EmptyState icon="📊" title="لا توجد بيانات بعد" sub="أرسل مهاماً وصحّح إجابات لترى التحليلات" cardBg={cardBg} borderCol={borderCol} textCol={textCol} subCol={subCol} />
             ) : (
               <>
-                {/* بطاقات الملخص */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
                   {[
-                    { icon: '👥', label: 'الطلاب',         value: stats.summary.totalStudents,      color: '#4facfe' },
-                    { icon: '📝', label: 'المهام',          value: stats.summary.totalAssignments,   color: '#a78bfa' },
-                    { icon: '📬', label: 'الإجابات',        value: stats.summary.totalSubmissions,   color: '#43e97b' },
-                    { icon: '🎯', label: 'متوسط الدرجات',  value: stats.summary.avgGrade || '—',    color: '#f9d423' },
-                    { icon: '⏳', label: 'تحتاج مراجعة',   value: stats.summary.pendingReview,      color: '#f97316' },
-                    { icon: '📈', label: 'نسبة الاستجابة', value: `${stats.summary.responseRate}%`, color: '#ec4899' },
+                    { icon: '👥', label: 'الطلاب',         value: stats.summary.totalStudents,      color: BRAND.crimson },
+                    { icon: '📝', label: 'المهام',          value: stats.summary.totalAssignments,   color: BRAND.orangeRed },
+                    { icon: '📬', label: 'الإجابات',        value: stats.summary.totalSubmissions,   color: BRAND.gold },
+                    { icon: '🎯', label: 'متوسط الدرجات',  value: stats.summary.avgGrade || '—',    color: BRAND.gold },
+                    { icon: '⏳', label: 'تحتاج مراجعة',   value: stats.summary.pendingReview,      color: BRAND.orange },
+                    { icon: '📈', label: 'نسبة الاستجابة', value: `${stats.summary.responseRate}%`, color: BRAND.deep },
                   ].map((card, i) => (
                     <div key={i} style={{ padding: '16px 12px', borderRadius: 14, background: cardBg, border: `1.5px solid ${card.color}33`, textAlign: 'center' }}>
                       <div style={{ fontSize: 26, marginBottom: 6 }}>{card.icon}</div>
@@ -733,7 +894,6 @@ export default function TeacherPage() {
                   ))}
                 </div>
 
-                {/* أداء الطلاب */}
                 {stats.studentStats.length > 0 && (
                   <div style={{ borderRadius: 16, background: cardBg, border: `1.5px solid ${borderCol}`, marginBottom: 20, overflow: 'hidden' }}>
                     <div style={{ padding: '14px 18px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -741,27 +901,24 @@ export default function TeacherPage() {
                       <span style={{ fontSize: 12, color: subCol }}>{stats.studentStats.length} طالب</span>
                     </div>
                     {stats.studentStats.map((s, i) => {
-                      const gradeColor = s.avgGrade === null ? subCol : s.avgGrade >= 7 ? '#43e97b' : s.avgGrade >= 5 ? '#f9d423' : '#fc8181'
+                      const gradeColor = s.avgGrade === null ? subCol : s.avgGrade >= 70 ? BRAND.gold : s.avgGrade >= 50 ? BRAND.orange : BRAND.crimson
                       return (
                         <div key={s.id} style={{ padding: '14px 18px', borderBottom: i < stats.studentStats.length - 1 ? `1px solid ${borderCol}` : 'none', display: 'flex', alignItems: 'center', gap: 14 }}>
-                          {/* الترتيب */}
                           <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${themeColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: themeColor, flexShrink: 0 }}>
                             {i + 1}
                           </div>
-                          {/* الاسم + شريط الاستجابة */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                               <span style={{ fontSize: 14, fontWeight: 700, color: textCol }}>{s.name}</span>
                               <span style={{ fontSize: 12, color: subCol }}>{s.responseRate}% استجابة</span>
                             </div>
-                            <div style={{ height: 6, borderRadius: 3, background: 'rgba(192,57,43,0.08)', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', borderRadius: 3, width: `${s.responseRate}%`, background: `linear-gradient(90deg,${themeColor},#ff4e50)`, transition: 'width 0.6s ease' }} />
+                            <div style={{ height: 6, borderRadius: 3, background: inputBg, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 3, width: `${s.responseRate}%`, background: `linear-gradient(90deg,${themeColor},${BRAND.gold})`, transition: 'width 0.6s ease' }} />
                             </div>
                           </div>
-                          {/* الدرجة */}
                           <div style={{ textAlign: 'center', flexShrink: 0, minWidth: 50 }}>
                             <div style={{ fontSize: 20, fontWeight: 900, color: gradeColor }}>
-                              {s.avgGrade !== null ? s.avgGrade : '—'}
+                              {s.avgGrade !== null ? `${s.avgGrade}%` : '—'}
                             </div>
                             <div style={{ fontSize: 10, color: subCol }}>{s.graded} مصحح</div>
                           </div>
@@ -771,7 +928,6 @@ export default function TeacherPage() {
                   </div>
                 )}
 
-                {/* أداء المهام */}
                 {stats.assignmentStats.length > 0 && (
                   <div style={{ borderRadius: 16, background: cardBg, border: `1.5px solid ${borderCol}`, overflow: 'hidden' }}>
                     <div style={{ padding: '14px 18px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -780,27 +936,24 @@ export default function TeacherPage() {
                     </div>
                     {stats.assignmentStats.map((a, i) => {
                       const pct        = a.avgPercent ?? 0
-                      const barColor   = a.avgPercent === null ? borderCol : pct >= 70 ? '#43e97b' : pct >= 50 ? '#f9d423' : '#fc8181'
-                      const gradeColor = a.avgPercent === null ? subCol : pct >= 70 ? '#43e97b' : pct >= 50 ? '#f9d423' : '#fc8181'
+                      const barColor   = a.avgPercent === null ? borderCol : pct >= 70 ? BRAND.gold : pct >= 50 ? BRAND.orange : BRAND.crimson
+                      const gradeColor = a.avgPercent === null ? subCol : pct >= 70 ? BRAND.gold : pct >= 50 ? BRAND.orange : BRAND.crimson
                       return (
                         <div key={a.id} style={{ padding: '14px 18px', borderBottom: i < stats.assignmentStats.length - 1 ? `1px solid ${borderCol}` : 'none' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 14, fontWeight: 700, color: textCol, marginBottom: 2 }}>{a.title}</div>
                               <div style={{ fontSize: 11, color: subCol }}>
-                                {a.submitted} إجابة {a.pending > 0 && <span style={{ color: '#f97316' }}>• {a.pending} معلّق</span>}
+                                {a.submitted} إجابة {a.pending > 0 && <span style={{ color: BRAND.orange }}>• {a.pending} معلّق</span>}
                               </div>
                             </div>
                             <div style={{ textAlign: 'center', flexShrink: 0, marginRight: 12 }}>
                               <div style={{ fontSize: 16, fontWeight: 900, color: gradeColor }}>
-                                {a.avgGrade !== null ? `${a.avgGrade}/${a.maxGrade}` : '—'}
+                                {a.avgGrade !== null ? `${a.avgGrade}%` : '—'}
                               </div>
-                              {a.avgPercent !== null && (
-                                <div style={{ fontSize: 10, color: gradeColor }}>{a.avgPercent}%</div>
-                              )}
                             </div>
                           </div>
-                          <div style={{ height: 6, borderRadius: 3, background: 'rgba(192,57,43,0.08)', overflow: 'hidden' }}>
+                          <div style={{ height: 6, borderRadius: 3, background: inputBg, overflow: 'hidden' }}>
                             <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: barColor, transition: 'width 0.6s ease' }} />
                           </div>
                         </div>
@@ -813,146 +966,139 @@ export default function TeacherPage() {
           </div>
         )}
 
-      {/* شريط التنقل */}
+      {/* شريط التنقل — مع زر "الاختبارات" المستقل */}
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: headerBg, backdropFilter: 'blur(20px)', borderTop: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-around', padding: '8px 0 14px' }}>
+        <button
+          onClick={() => router.push('/teacher/quizzes')}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 10, color: subCol, position: 'relative', transition: 'all 0.2s' }}>
+          <span style={{ fontSize: 20 }}>🎯</span>
+          <span style={{ fontSize: 10, fontWeight: 600 }}>الاختبارات</span>
+        </button>
         {TABS.map(tb => (
           <button key={tb.id} onClick={() => setTab(tb.id)}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 10, color: tab === tb.id ? themeColor : subCol, position: 'relative', transition: 'all 0.2s' }}>
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: tab === tb.id ? `${themeColor}16` : 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 10, color: tab === tb.id ? themeColor : subCol, position: 'relative', transition: 'all 0.2s' }}>
             <span style={{ fontSize: 20 }}>{tb.icon}</span>
             <span style={{ fontSize: 10, fontWeight: tab === tb.id ? 800 : 600 }}>{tb.label}</span>
             {'badge' in tb && (tb as { badge: number }).badge > 0 && (
-              <span style={{ position: 'absolute', top: 0, right: 2, background: '#fc8181', color: '#fff', width: 16, height: 16, borderRadius: '50%', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(tb as { badge: number }).badge}</span>
+              <span style={{ position: 'absolute', top: 0, right: 2, background: BRAND.crimson, color: '#fff', width: 16, height: 16, borderRadius: '50%', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(tb as { badge: number }).badge}</span>
             )}
           </button>
         ))}
       </nav>
 
-      {/* ══ نافذة إنشاء مجموعة جديدة ══════════════════════════ */}
+      {/* ══ نافذة إنشاء فصل جديد (بلا تغيير) ══════════════════════════ */}
       {showNewG && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowNewG(false) }}>
-          <div style={{ width: '100%', maxWidth: 560, borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 560, borderRadius: 20, background: cardBg, border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>👥 مجموعة جديدة</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>🏫 فصل جديد</h3>
               <button onClick={() => setShowNewG(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {gDone && <div style={{ padding: '12px', borderRadius: 10, background: 'rgba(67,233,123,0.15)', color: '#43e97b', fontSize: 14, fontWeight: 700, textAlign: 'center' }}>✅ تم إنشاء المجموعة!</div>}
+              {gDone && <div style={{ padding: '12px', borderRadius: 10, background: 'rgba(220,140,60,0.15)', color: BRAND.gold, fontSize: 14, fontWeight: 700, textAlign: 'center' }}>✅ تم إنشاء الفصل!</div>}
+              {classError && <div style={{ padding: '12px', borderRadius: 10, background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, fontSize: 13, fontWeight: 700, textAlign: 'center' }}>⚠️ {classError}</div>}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>اسم المجموعة *</label>
-                <input value={gName} onChange={e => setGName(e.target.value)} placeholder="مثال: المجموعة أ، المتفوقون، الصف 12أ" style={inputStyle} />
+                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>اسم الفصل *</label>
+                <input value={gName} onChange={e => setGName(e.target.value)} placeholder="مثال: الصف 12أ، المتفوقون" style={inputStyle} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>المادة</label>
                   <select value={gSubject} onChange={e => setGSubject(e.target.value)} style={inputStyle}>
-                    <option value="">-- كل المواد --</option>
+                    <option value="">-- بلا مادة محدَّدة --</option>
                     {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>المستوى</label>
-                  <select value={gLevel} onChange={e => setGLevel(e.target.value)} style={inputStyle}>
-                    <option value="all">الكل</option>
-                    <option value="advanced">متقدم</option>
-                    <option value="intermediate">متوسط</option>
-                    <option value="basic">أساسي</option>
-                  </select>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 6 }}>المرحلة/المستوى</label>
+                  <input value={gLevel} onChange={e => setGLevel(e.target.value)} placeholder="مثال: الصف 12" style={inputStyle} />
                 </div>
               </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: subCol, display: 'block', marginBottom: 8 }}>اختر الطلاب ({gStudents.length} محدد)</label>
-                <div style={{ maxHeight: 200, overflowY: 'auto', border: `1.5px solid ${borderCol}`, borderRadius: 12, padding: 4 }}>
-                  {students.map(s => (
-                    <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer', background: gStudents.includes(s.id) ? `${themeColor}12` : 'transparent' }}>
-                      <input type="checkbox" checked={gStudents.includes(s.id)}
-                        onChange={e => setGStudents(prev => e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id))}
-                        style={{ width: 16, height: 16, accentColor: themeColor }} />
-                      <span style={{ fontSize: 14, color: textCol, fontWeight: gStudents.includes(s.id) ? 700 : 400 }}>👨‍🎓 {s.name}</span>
-                      <span style={{ fontSize: 11, color: subCol, marginRight: 'auto' }}>{s.email}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <button onClick={createGroup} disabled={creatingG || !gName.trim()}
-                style={{ padding: '13px', borderRadius: 12, border: 'none', background: gName.trim() ? `linear-gradient(135deg,${themeColor},#ff4e50)` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: gName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                {creatingG ? <><span style={{ width: 16, height: 16, border: '2px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الإنشاء...</> : '✅ إنشاء المجموعة'}
+              <p style={{ fontSize: 12, color: subCol, margin: 0 }}>بعد الإنشاء، افتح الفصل لإضافة الطلاب إليه.</p>
+              <button onClick={createClass} disabled={creatingG || !gName.trim()}
+                style={{ padding: '13px', borderRadius: 12, border: 'none', background: gName.trim() ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: gName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {creatingG ? <><span style={{ width: 16, height: 16, border: '2px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الإنشاء...</> : '✅ إنشاء الفصل'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ نافذة تفاصيل المجموعة ══════════════════════════════ */}
-      {openGroup && (
+      {/* ══ نافذة تفاصيل الفصل (بلا تغيير) ══════════════════════════════ */}
+      {openClass && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={e => { if (e.target === e.currentTarget) setOpenGroup(null) }}>
-          <div style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          onClick={e => { if (e.target === e.currentTarget) setOpenClass(null) }}>
+          <div style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', borderRadius: 20, background: cardBg, border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>👥 {openGroup.name}</h3>
-                <p style={{ fontSize: 12, color: subCol, margin: '4px 0 0' }}>{openGroup.group_members?.length ?? 0} طالب</p>
+                <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>🏫 {openClass.name}</h3>
+                <p style={{ fontSize: 12, color: subCol, margin: '4px 0 0' }}>{openClass.students.length} طالب</p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => deleteGroup(openGroup.id)}
-                  style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(252,129,129,0.4)', background: 'rgba(252,129,129,0.1)', color: '#fc8181', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+                <button onClick={() => deleteClass(openClass.id)}
+                  style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(180,40,40,0.4)', background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
                   🗑️ حذف
                 </button>
-                <button onClick={() => setOpenGroup(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
+                <button onClick={() => setOpenClass(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
               </div>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: 20 }}>
-              {/* أعضاء المجموعة الحاليون */}
-              <h4 style={{ fontSize: 14, fontWeight: 700, color: textCol, marginBottom: 12 }}>أعضاء المجموعة:</h4>
-              {openGroup.group_members?.length === 0
-                ? <p style={{ color: subCol, fontSize: 13 }}>لا يوجد أعضاء بعد</p>
-                : openGroup.group_members?.map(m => (
-                  <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: textCol }}>👨‍🎓 {m.users?.name}</div>
-                      <div style={{ fontSize: 11, color: subCol }}>{m.users?.email}</div>
-                    </div>
-                    <button onClick={() => removeFromGroup(openGroup.id, m.student_id)}
-                      style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(252,129,129,0.4)', background: 'rgba(252,129,129,0.1)', color: '#fc8181', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
-                      إزالة
-                    </button>
-                  </div>
-                ))}
+              {loadingClassDetail ? (
+                <p style={{ color: subCol, fontSize: 13, textAlign: 'center' }}>⏳ جارٍ التحميل...</p>
+              ) : (
+                <>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: textCol, marginBottom: 12 , fontFamily: BRAND.fontHeading }}>طلاب الفصل:</h4>
+                  {openClass.students.length === 0
+                    ? <p style={{ color: subCol, fontSize: 13 }}>لا يوجد طلاب بعد</p>
+                    : openClass.students.map(m => (
+                      <div key={m.member_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: textCol }}>👨‍🎓 {m.full_name}</div>
+                          <div style={{ fontSize: 11, color: subCol }}>{m.email}{m.avg_score != null ? ` • متوسط: ${m.avg_score}` : ''}</div>
+                        </div>
+                        <button onClick={() => removeFromClass(openClass.id, m.student_id)}
+                          style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(180,40,40,0.4)', background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+                          إزالة
+                        </button>
+                      </div>
+                    ))}
 
-              {/* إضافة طلاب جدد */}
-              <h4 style={{ fontSize: 14, fontWeight: 700, color: textCol, marginTop: 20, marginBottom: 12 }}>إضافة طلاب:</h4>
-              {students
-                .filter(s => !openGroup.group_members?.some(m => m.student_id === s.id))
-                .map(s => (
-                  <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 14, color: textCol }}>👨‍🎓 {s.name}</div>
-                      <div style={{ fontSize: 11, color: subCol }}>{s.email}</div>
-                    </div>
-                    <button onClick={() => addToGroup(openGroup.id, s.id)} disabled={addingMember}
-                      style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: themeColor, color: '#1a1a2e', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>
-                      ＋ إضافة
-                    </button>
-                  </div>
-                ))}
+                  <h4 style={{ fontSize: 14, fontWeight: 700, color: textCol, marginTop: 20, marginBottom: 12 , fontFamily: BRAND.fontHeading }}>إضافة طلاب:</h4>
+                  {students
+                    .filter(s => !openClass.students.some(m => m.student_id === s.id))
+                    .map(s => (
+                      <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: inputBg, border: `1px solid ${borderCol}`, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 14, color: textCol }}>👨‍🎓 {s.name}</div>
+                          <div style={{ fontSize: 11, color: subCol }}>{s.email}</div>
+                        </div>
+                        <button onClick={() => addToClass(openClass.id, s.id)} disabled={addingMember}
+                          style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: themeColor, color: '#1a1a2e', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}>
+                          ＋ إضافة
+                        </button>
+                      </div>
+                    ))}
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ نافذة مراجعة الإجابة ══════════════════════════════ */}
+      {/* ══ نافذة مراجعة الإجابة (بلا تغيير) ══════════════════════════════ */}
       {openSub && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setOpenSub(null) }}>
-          <div style={{ width: '100%', maxWidth: 700, maxHeight: '92vh', borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 700, maxHeight: '92vh', borderRadius: 20, background: cardBg, border: `1px solid ${borderCol}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, margin: 0 }}>✏️ مراجعة إجابة — {openSub.users?.name}</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>✏️ مراجعة إجابة — {openSub.users?.name}</h3>
               <button onClick={() => setOpenSub(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: 20 }}>
               {reviewDone ? (
                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
                   <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-                  <h3 style={{ color: '#43e97b', fontSize: 20, fontWeight: 900 }}>تم حفظ التصحيح!</h3>
+                  <h3 style={{ color: BRAND.gold, fontSize: 20, fontWeight: 900, fontFamily: BRAND.fontHeading }}>تم حفظ التصحيح!</h3>
                 </div>
               ) : (
                 <>
@@ -961,8 +1107,8 @@ export default function TeacherPage() {
                     <div style={{ padding: '14px 16px', borderRadius: 12, background: inputBg, border: `1px solid ${borderCol}`, fontSize: 14, color: textCol, lineHeight: 1.7 }}>{openSub.answer_text}</div>
                   </div>
                   {openSub.ai_grade !== null && openSub.ai_grade !== undefined && (
-                    <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(79,172,254,0.1)', border: '1px solid rgba(79,172,254,0.3)', marginBottom: 20 }}>
-                      <div style={{ fontSize: 13, color: '#4facfe', fontWeight: 700, marginBottom: 6 }}>🤖 تقييم الذكاء الاصطناعي: {openSub.ai_grade} درجة</div>
+                    <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(180,40,40,0.1)', border: '1px solid rgba(180,40,40,0.3)', marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, color: BRAND.crimson, fontWeight: 700, marginBottom: 6 }}>🤖 تقييم الذكاء الاصطناعي: {openSub.ai_grade} درجة</div>
                       {openSub.ai_feedback && <p style={{ fontSize: 13, color: textCol, margin: 0, lineHeight: 1.6 }}>{openSub.ai_feedback}</p>}
                     </div>
                   )}
@@ -977,7 +1123,7 @@ export default function TeacherPage() {
                     </div>
                   </div>
                   <button onClick={submitReview} disabled={reviewing || !tGrade}
-                    style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: tGrade ? `linear-gradient(135deg,${themeColor},#ff4e50)` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: tGrade ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: tGrade ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: tGrade ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {reviewing ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الحفظ...</> : '💾 حفظ التصحيح وإرسال الدرجة'}
                   </button>
                 </>
@@ -987,12 +1133,12 @@ export default function TeacherPage() {
         </div>
       )}
 
-      {/* ══ نافذة عرض الوسائط ══════════════════════════════════ */}
+      {/* ══ نافذة عرض الوسائط (بلا تغيير) ══════════════════════════════════ */}
       {openMedia && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setOpenMedia(null) }}>
-          <div style={{ width: '100%', maxWidth: 760, borderRadius: 20, background: '#FDFAF5', border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 760, borderRadius: 20, background: cardBg, border: `1px solid ${borderCol}`, overflow: 'hidden' }}>
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${borderCol}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 900, color: themeColor, margin: 0 }}>{openMedia.title}</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>{openMedia.title}</h3>
               <button onClick={() => setOpenMedia(null)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
@@ -1011,21 +1157,21 @@ export default function TeacherPage() {
         </div>
       )}
 
-      {/* ══ الإعدادات ══════════════════════════════════════════ */}
+      {/* ══ الإعدادات (بلا تغيير) ══════════════════════════════════════ */}
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}>
-          <div style={{ width: '90%', maxWidth: 380, borderRadius: 24, padding: 28, background: '#FDFAF5', border: `1px solid ${borderCol}` }}>
+          <div style={{ width: '90%', maxWidth: 380, borderRadius: 24, padding: 28, background: cardBg, border: `1px solid ${borderCol}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, margin: 0 }}>⚙️ الإعدادات</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>⚙️ الإعدادات</h2>
               <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ marginBottom: 24 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>🎨 لون المظهر</p>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {THEME_COLORS.map(th => <button key={th.value} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px #F5F0E8, 0 0 0 5px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
+                {THEME_COLORS.map((th, i) => <button key={`${th.value}-${i}`} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px ${bg}, 0 0 0 5px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
               </div>
             </div>
-            <button onClick={saveSettings} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},#ff4e50)`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>💾 حفظ</button>
+            <button onClick={saveSettings} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>💾 حفظ</button>
           </div>
         </div>
       )}
@@ -1033,14 +1179,15 @@ export default function TeacherPage() {
   )
 }
 
-function EmptyState({ icon, title, sub }: {
+function EmptyState({ icon, title, sub, cardBg = '#FDFAF5', borderCol = 'rgba(192,57,43,0.15)', textCol = '#1A1221', subCol = '#6B5050' }: {
   icon: string; title: string; sub: string
+  cardBg?: string; borderCol?: string; textCol?: string; subCol?: string
 }) {
   return (
-    <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FDFAF5', borderRadius: 18, border: '1.5px solid rgba(192,57,43,0.15)' }}>
+    <div style={{ textAlign: 'center', padding: '60px 20px', background: cardBg, borderRadius: 18, border: `1.5px solid ${borderCol}` }}>
       <div style={{ fontSize: 52, marginBottom: 14 }}>{icon}</div>
-      <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1A1221', marginBottom: 8 }}>{title}</h3>
-      <p style={{ fontSize: 14, color: '#6B5050', opacity: 0.8 }}>{sub}</p>
+      <h3 style={{ fontSize: 17, fontWeight: 800, color: textCol, marginBottom: 8 , fontFamily: BRAND.fontHeading }}>{title}</h3>
+      <p style={{ fontSize: 14, color: subCol, opacity: 0.8 }}>{sub}</p>
     </div>
   )
 }

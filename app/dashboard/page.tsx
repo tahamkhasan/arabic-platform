@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ar } from '@/lib/constants/ar'
+import { BRAND } from '@/lib/constants/theme'
 import FeedbackButtons from '@/components/FeedbackButtons'
 import PrintButton from '@/components/PrintButton'
 import SpeechButton from '@/components/SpeechButton'
@@ -14,7 +15,7 @@ import NotificationBell from '@/components/NotificationBell'
 const t = ar.dashboard
 const c = ar.common
 
-interface User { id: string; name: string; role: string; user_type: string; theme_color?: string; theme_mode?: string }
+interface User { id: string; name: string; role: string; user_type: string; status?: string; theme_color?: string; theme_mode?: string }
 interface Subject { id: string; name: string; icon?: string; grade?: string; stage?: string }
 interface Unit { id: string; name: string; icon?: string }
 interface Lesson { id: string; name: string; content?: string; file_urls?: string[] }
@@ -22,51 +23,105 @@ interface Exam { id: string; name: string; exam_type: 'short' | 'final' }
 
 const TOOLS = t.tools as readonly { id: string; icon: string; label: string; desc: string }[]
 
-const T = {
-  bg: '#F5F0E8',
-  pageBg: '#F7F2EA',
-  sectionBg: '#FBF8F2',
-  cardBg: '#FFFDF9',
-  cardSoft: '#F3E8DE',
-  headerBg: 'rgba(245,240,232,0.94)',
+// ──────────────────────────────────────────────────────────────
+// لون ثابت للعناصر الحساسة بالهوية (شعار المنصة، أزرار الهيدر
+// الإدارية، شارات الهيرو) — لا يتبع أبداً اختيار المستخدم الشخصي
+// لـ themeColor، حتى لو اختار المستخدم لوناً غير متّسق بالهوية.
+// ──────────────────────────────────────────────────────────────
+const FIXED_BRAND_COLOR = BRAND.deep
 
-  textCol: '#211C17',
-  titleCol: '#1A1221',
-  subCol: '#6E6258',
-  mutedCol: '#8A7B70',
+// ── لوحتا الألوان: فاتح وداكن — مع تحويل الذهبي إلى نبيتي ──────
+const LIGHT_THEME = {
+  bg: BRAND.bg,
+  pageBg: BRAND.bgSoft,
+  sectionBg: BRAND.bgSoft,
+  cardBg: BRAND.bgSoft,
+  cardSoft: BRAND.bgSoft,
+  headerBg: 'rgba(247,242,234,0.94)',
 
-  borderCol: '#E8DDCF',
-  borderSoft: 'rgba(192,57,43,0.10)',
-  inputBg: '#FFF9F3',
-  inputBorder: '#E5D7C8',
+  textCol: BRAND.text,
+  titleCol: BRAND.text,
+  subCol: BRAND.sub,
+  mutedCol: BRAND.muted,
 
-  primary: '#D96B2B',
-  primaryHover: '#BF5A20',
-  primarySoft: '#F3E0D2',
-  primaryDeep: '#C0392B',
+  borderCol: BRAND.border,
+  borderSoft: BRAND.border,
+  inputBg: '#FFFFFF',
+  inputBorder: BRAND.border,
 
-  gold: '#F4A420',
+  primary: BRAND.red,
+  primaryHover: BRAND.crimson,
+  primarySoft: 'rgba(140,20,40,0.08)',
+  primaryDeep: BRAND.deep,
+  crimson: BRAND.crimson,
+
+  gold: BRAND.crimson, // 🔴 تحويل الذهبي إلى قرمزي نبيتي
   blue: '#2563EB',
   blueDark: '#1D4ED8',
-  green: '#4D7C3A',
-  danger: '#C85A54',
+  green: BRAND.crimson, // 🔴 تحويل الأخضر إلى قرمزي
+  danger: BRAND.crimson,
 
-  gradMain: 'linear-gradient(135deg,#C0392B,#E07020)',
-  gradBlue: 'linear-gradient(135deg,#2563EB,#1D4ED8)',
-  gradWarm: 'linear-gradient(135deg,#F7E5D3,#FFF9F3)',
+  gradMain: BRAND.gradMain,
+  gradBlue: BRAND.gradBlue,
+  gradWarm: `linear-gradient(135deg, rgba(140,20,40,0.10), ${BRAND.bgSoft})`, // 🔴 نبيتي بدلاً من برتقالي
 
-  shadowSoft: '0 8px 30px rgba(73,44,24,0.08)',
-  shadowCard: '0 10px 24px rgba(60,35,20,0.06)',
-  blueGlow: '0 8px 24px rgba(37,99,235,0.18)',
+  shadowSoft: BRAND.shadow,
+  shadowCard: BRAND.shadowWarm,
+  blueGlow: BRAND.shadowBlue,
+
+  fontHeading: BRAND.fontHeading,
 }
 
-const ACCENT_COLORS = ['#C0392B', '#E07020', '#F4A420', '#2563EB', '#059669', '#7C3AED']
+const DARK_THEME = {
+  bg: '#1A1612',
+  pageBg: '#15120F',
+  sectionBg: '#211B16',
+  cardBg: '#241F1A',
+  cardSoft: '#2B241D',
+  headerBg: 'rgba(26,22,18,0.92)',
+
+  textCol: '#F0E9DE',
+  titleCol: '#F5EFE6',
+  subCol: '#B5A99C',
+  mutedCol: '#8F8378',
+
+  borderCol: 'rgba(140,20,40,0.25)', // 🔴 نبيتي بدلاً من برتقالي
+  borderSoft: 'rgba(140,20,40,0.18)',
+  inputBg: 'rgba(255,255,255,0.05)',
+  inputBorder: 'rgba(255,255,255,0.10)',
+
+  primary: BRAND.crimson, // 🔴 قرمزي بدلاً من برتقالي
+  primaryHover: BRAND.red,
+  primarySoft: 'rgba(140,20,40,0.15)',
+  primaryDeep: BRAND.deep,
+  crimson: BRAND.crimson,
+
+  gold: BRAND.crimson, // 🔴 تحويل الذهبي إلى قرمزي
+  blue: '#4FA0FE',
+  blueDark: '#2563EB',
+  green: BRAND.crimson, // 🔴 تحويل الأخضر إلى قرمزي
+  danger: BRAND.crimson,
+
+  gradMain: BRAND.gradMain,
+  gradBlue: BRAND.gradBlue,
+  gradWarm: 'linear-gradient(135deg,#2B241D,#1A1612)',
+
+  shadowSoft: '0 8px 30px rgba(0,0,0,0.35)',
+  shadowCard: '0 10px 24px rgba(0,0,0,0.3)',
+  blueGlow: '0 8px 24px rgba(37,99,235,0.25)',
+
+  fontHeading: BRAND.fontHeading,
+}
+
+// لوحة ألوان التمييز الشخصي — إزالة الذهبي واستبداله بألوان نبيتية
+const ACCENT_COLORS = [BRAND.deep, BRAND.red, BRAND.crimson, BRAND.orangeRed, BRAND.orange]
 
 export default function DashboardPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<User | null>(null)
-  const [themeColor, setThemeColor] = useState(T.primaryDeep)
+  const [themeColor, setThemeColor] = useState<string>(LIGHT_THEME.primaryDeep)
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light')
   const [showSettings, setShowSettings] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
 
@@ -102,20 +157,27 @@ export default function DashboardPage() {
     try {
       const u = JSON.parse(saved) as User
       if (u.user_type === 'student') { router.replace('/student'); return }
+      // ── جديد: حساب لم يوافَق عليه أو مُعلَّق لا يدخل المحتوى ──
+      // (نفس الفجوة الموجودة سابقاً في app/student/page.tsx)
+      if (u.status === 'pending' || u.status === 'suspended') {
+        router.replace('/pending-approval')
+        return
+      }
       setUser(u)
       if (u.theme_color) setThemeColor(u.theme_color)
+      if (u.theme_mode === 'dark') setThemeMode('dark')
     } catch {
       router.replace('/')
     }
   }, [router])
 
   useEffect(() => {
-    if (!user) return
-    fetch('/api/subjects')
-      .then(r => r.json())
-      .then(d => setSubjects(d.subjects ?? []))
-      .catch(console.error)
-  }, [user])
+  if (!user) return
+  fetch(`/api/subjects?teacherId=${user.id}`)
+    .then(r => r.json())
+    .then(d => setSubjects(d.subjects ?? []))
+    .catch(console.error)
+}, [user])
 
   useEffect(() => {
     if (!selSubject) { setUnits([]); setSelUnit(null); return }
@@ -140,6 +202,10 @@ export default function DashboardPage() {
       .then(d => setExams(d.exams ?? []))
       .catch(console.error)
   }, [tool, selSubject, examType])
+
+  // ── الوضع الليلي: لوحة الألوان الفعّالة ──
+  const isDark = themeMode === 'dark'
+  const T = isDark ? DARK_THEME : LIGHT_THEME
 
   const bg = T.bg
   const cardBg = T.cardBg
@@ -235,16 +301,30 @@ export default function DashboardPage() {
         body: JSON.stringify({
           userId: user.id,
           theme_color: themeColor,
-          theme_mode: 'light',
+          theme_mode: themeMode,
         }),
       })
-      const updated = { ...user, theme_color: themeColor, theme_mode: 'light' }
+      const updated = { ...user, theme_color: themeColor, theme_mode: themeMode }
       setUser(updated)
       localStorage.setItem('mosaed_user', JSON.stringify(updated))
     } finally {
       setSavingSettings(false)
       setShowSettings(false)
     }
+  }
+
+  function toggleThemeMode() {
+    if (!user) return
+    const next = themeMode === 'dark' ? 'light' : 'dark'
+    setThemeMode(next)
+    const updated = { ...user, theme_mode: next }
+    setUser(updated)
+    localStorage.setItem('mosaed_user', JSON.stringify(updated))
+    fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, theme_mode: next }),
+    }).catch(() => {})
   }
 
   async function handleLogout() {
@@ -268,7 +348,7 @@ export default function DashboardPage() {
         minHeight: '100vh',
         background: `linear-gradient(180deg, ${T.bg} 0%, ${T.pageBg} 100%)`,
         color: textCol,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+        fontFamily: BRAND.fontBody,
       }}
     >
       <style>{`
@@ -321,7 +401,23 @@ export default function DashboardPage() {
               م
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: themeColor, lineHeight: 1.2 }}>
+              {/*
+                ثابت بـ FIXED_BRAND_COLOR (BRAND.deep) عمداً — هذه شارة
+                هوية المنصة، لا تتبع لون التمييز الشخصي لأي مستخدم
+                (مدير أو معلم)، بخلاف بقية عناصر هذه الصفحة.
+              */}
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 900,
+                  color: FIXED_BRAND_COLOR,
+                  background: `${FIXED_BRAND_COLOR}16`,
+                  display: 'inline-block',
+                  padding: '2px 10px',
+                  borderRadius: 8,
+                  lineHeight: 1.2,
+                }}
+              >
                 {c.platformName}
               </div>
               <div style={{ fontSize: 13, color: subCol, marginTop: 3 }}>
@@ -331,10 +427,23 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <HeaderBtn label="👨‍🏫 إدارة الطلاب" color={themeColor} bordered onClick={() => router.push('/teacher')} />
-            <HeaderBtn label="📚 سجل التوليدات" color={themeColor} bordered onClick={() => router.push('/history')} />
-            <HeaderBtn label={t.settings.title} color={subCol} onClick={() => setShowSettings(true)} />
-            <HeaderBtn label={c.logout} color={T.danger} danger onClick={handleLogout} />
+            {/*
+              أزرار الهيدر الإدارية (إدارة الطلاب / سجل التوليدات) ثابتة
+              بـ FIXED_BRAND_COLOR أيضاً — كانت تتبع themeColor سابقاً،
+              وهذا ما تسبب بظهورها بالذهبي حين اختار المستخدم لوناً
+              شخصياً مغايراً للهوية. زر تبديل الوضع الليلي/النهاري والإعدادات
+              وتسجيل الخروج تبقى محايدة كما كانت.
+            */}
+            <HeaderBtn label="👨‍🏫 إدارة الطلاب" color={FIXED_BRAND_COLOR} bordered onClick={() => router.push('/teacher')} T={T} />
+            <HeaderBtn label="📚 سجل التوليدات" color={FIXED_BRAND_COLOR} bordered onClick={() => router.push('/history')} T={T} />
+            <HeaderBtn
+              label={isDark ? '☀️' : '🌙'}
+              color={subCol}
+              onClick={toggleThemeMode}
+              T={T}
+            />
+            <HeaderBtn label={t.settings.title} color={subCol} onClick={() => setShowSettings(true)} T={T} />
+            <HeaderBtn label={c.logout} color={T.danger} danger onClick={handleLogout} T={T} />
             <NotificationBell
               userId={user.id}
               themeColor={themeColor}
@@ -343,7 +452,7 @@ export default function DashboardPage() {
               cardBg={cardBg}
               borderCol={borderCol}
               inputBg={inputBg}
-              isDark={false}
+              isDark={isDark}
             />
           </div>
         </div>
@@ -362,14 +471,19 @@ export default function DashboardPage() {
         >
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 18, alignItems: 'center' }}>
             <div>
+              {/*
+                شارة "مساحة المعلم لإنتاج المحتوى" ثابتة بـ FIXED_BRAND_COLOR
+                أيضاً — عنصر هوية متكرر في كل تحميل للصفحة، وليس عنصر
+                تخصيص شخصي تفاعلي كالبطاقات أدناه.
+              */}
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                  background: `${themeColor}10`,
-                  color: themeColor,
-                  border: `1px solid ${themeColor}22`,
+                  background: `${FIXED_BRAND_COLOR}10`,
+                  color: FIXED_BRAND_COLOR,
+                  border: `1px solid ${FIXED_BRAND_COLOR}22`,
                   padding: '8px 14px',
                   borderRadius: 999,
                   fontSize: 13,
@@ -380,9 +494,26 @@ export default function DashboardPage() {
                 ✨ مساحة المعلم لإنتاج المحتوى
               </div>
 
-              <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.35, fontWeight: 900, color: T.titleCol }}>
+              <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.35, fontWeight: 900, color: T.titleCol , fontFamily: BRAND.fontHeading }}>
                 اختر الدرس ثم
-                <span style={{ color: themeColor }}> أنشئ شرحك واختبارك وخطتك </span>
+                {/*
+                  التظليل على "أنشئ شرحك واختبارك وخطتك" يبقى تابعاً
+                  لـ themeColor الشخصي عمداً (وليس FIXED_BRAND_COLOR) —
+                  بعد تصحيح theme_color المخزّن في قاعدة البيانات لهذا
+                  الحساب، سيظهر بالنبيتي تلقائياً دون أي تعديل إضافي هنا.
+                */}
+                <span
+                  style={{
+                    color: themeColor,
+                    background: `${themeColor}14`,
+                    padding: '2px 10px',
+                    borderRadius: 10,
+                    boxDecorationBreak: 'clone',
+                    WebkitBoxDecorationBreak: 'clone',
+                  }}
+                >
+                  {' '}أنشئ شرحك واختبارك وخطتك{' '}
+                </span>
                 من مكان واحد.
               </h1>
 
@@ -393,15 +524,15 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 12 }}>
-              <StatCard title="المواد" value={subjects.length} sub="متاحة الآن" color={themeColor} icon="📚" />
-              <StatCard title="الوحدات" value={units.length} sub="ضمن المادة" color={T.green} icon="🗂️" />
-              <StatCard title="الدروس" value={lessons.length} sub="جاهزة للاستخدام" color={T.blue} icon="📖" />
-              <StatCard title="الأداة" value={toolData?.label ?? '—'} sub="المحددة حالياً" color={T.gold} icon="✨" />
+              <StatCard title="المواد" value={subjects.length} sub="متاحة الآن" color={themeColor} icon="📚" T={T} />
+              <StatCard title="الوحدات" value={units.length} sub="ضمن المادة" color={T.crimson} icon="🗂️" T={T} />
+              <StatCard title="الدروس" value={lessons.length} sub="جاهزة للاستخدام" color={T.blue} icon="📖" T={T} />
+              <StatCard title="الأداة" value={toolData?.label ?? '—'} sub="المحددة حالياً" color={T.crimson} icon="✨" T={T} />
             </div>
           </div>
         </section>
 
-        <Section step="①" title="اختر المادة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+        <Section step="①" title="اختر المادة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor} T={T}>
           {subjects.length === 0 ? (
             <Empty text={t.noSubjects} subCol={subCol} />
           ) : (
@@ -430,7 +561,7 @@ export default function DashboardPage() {
         </Section>
 
         {selSubject && (
-          <Section step="②" title="اختر الوحدة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+          <Section step="②" title="اختر الوحدة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor} T={T}>
             {units.length === 0 ? (
               <Empty text="لا توجد وحدات لهذه المادة" subCol={subCol} />
             ) : (
@@ -458,7 +589,7 @@ export default function DashboardPage() {
         )}
 
         {selUnit && (
-          <Section step="③" title="اختر الدرس" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+          <Section step="③" title="اختر الدرس" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor} T={T}>
             {lessons.length === 0 ? (
               <Empty text="لا توجد دروس لهذه الوحدة" subCol={subCol} />
             ) : (
@@ -485,7 +616,7 @@ export default function DashboardPage() {
         )}
 
         {selSubject && (
-          <Section step="④" title="اختر الأداة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+          <Section step="④" title="اختر الأداة" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor} T={T}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
               {TOOLS.map(tool_ => (
                 <button
@@ -568,7 +699,7 @@ export default function DashboardPage() {
         )}
 
         {canGenerate && (
-          <Section step="⑤" title="تفاصيل إضافية" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor}>
+          <Section step="⑤" title="تفاصيل إضافية" cardBg={cardBg} borderCol={borderCol} textCol={textCol} themeColor={themeColor} T={T}>
             <textarea
               value={details}
               onChange={e => setDetails(e.target.value)}
@@ -644,7 +775,7 @@ export default function DashboardPage() {
               marginBottom: 20,
               padding: '14px 18px',
               borderRadius: 14,
-              background: '#FFF4F1',
+              background: isDark ? 'rgba(224,114,114,0.12)' : '#FFF4F1',
               border: '1px solid rgba(200,90,84,0.28)',
               color: T.danger,
               fontSize: 15,
@@ -670,7 +801,19 @@ export default function DashboardPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <h3 style={{ fontSize: 18, fontWeight: 900, color: themeColor, margin: 0 }}>
+                <h3
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    color: themeColor,
+                    background: `${themeColor}14`,
+                    display: 'inline-block',
+                    padding: '3px 12px',
+                    borderRadius: 8,
+                    margin: 0,
+                    fontFamily: BRAND.fontHeading,
+                  }}
+                >
                   {toolData?.icon} {toolData?.label}
                   {selLesson && ` — ${selLesson.name}`}
                   {selExam && ` — ${selExam.name}`}
@@ -683,7 +826,7 @@ export default function DashboardPage() {
                 )}
 
                 {editSaved && (
-                  <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 8, background: 'rgba(72,187,120,0.16)', color: T.green, fontWeight: 800 }}>
+                  <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 8, background: 'rgba(180,40,40,0.16)', color: T.crimson, fontWeight: 800 }}>
                     ✅ تم الحفظ
                   </span>
                 )}
@@ -704,7 +847,7 @@ export default function DashboardPage() {
                       setCopied(true)
                       setTimeout(() => setCopied(false), 2000)
                     }}
-                    style={smallBtn(copied ? 'rgba(72,187,120,0.15)' : 'transparent', copied ? T.green : subCol, `1px solid ${copied ? T.green : borderCol}`)}
+                    style={smallBtn(copied ? 'rgba(180,40,40,0.15)' : 'transparent', copied ? T.crimson : subCol, `1px solid ${copied ? T.crimson : borderCol}`)}
                   >
                     {copied ? '✅ تم النسخ' : '📋 نسخ'}
                   </button>
@@ -800,7 +943,7 @@ export default function DashboardPage() {
                     border: `1px solid ${themeColor}66`,
                     color: textCol,
                     fontSize: 15,
-                    fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+                    fontFamily: BRAND.fontBody,
                     resize: 'vertical',
                     lineHeight: 1.9,
                   }}
@@ -866,7 +1009,21 @@ export default function DashboardPage() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, margin: 0 }}>{t.settings.title}</h2>
+              <h2
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: themeColor,
+                  background: `${themeColor}14`,
+                  display: 'inline-block',
+                  padding: '3px 12px',
+                  borderRadius: 8,
+                  margin: 0,
+                  fontFamily: BRAND.fontHeading,
+                }}
+              >
+                {t.settings.title}
+              </h2>
               <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
             </div>
 
@@ -924,7 +1081,7 @@ export default function DashboardPage() {
           color: subCol,
           fontSize: 13,
           borderTop: `1px solid ${borderCol}`,
-          background: 'rgba(255,255,255,0.22)',
+          background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.22)',
         }}
       >
         {c.footerStages}
@@ -933,14 +1090,17 @@ export default function DashboardPage() {
   )
 }
 
+type ThemePalette = typeof LIGHT_THEME | typeof DARK_THEME
+
 function HeaderBtn({
-  label, color, onClick, bordered, danger,
+  label, color, onClick, bordered, danger, T,
 }: {
   label: string
   color: string
   onClick: () => void
   bordered?: boolean
   danger?: boolean
+  T: ThemePalette
 }) {
   return (
     <button
@@ -972,7 +1132,7 @@ function HeaderBtn({
 }
 
 function Section({
-  step, title, children, cardBg, borderCol, textCol, themeColor,
+  step, title, children, cardBg, borderCol, textCol, themeColor, T,
 }: {
   step: string
   title: string
@@ -981,6 +1141,7 @@ function Section({
   borderCol: string
   textCol: string
   themeColor: string
+  T: ThemePalette
 }) {
   return (
     <div
@@ -994,8 +1155,23 @@ function Section({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <span style={{ fontSize: 18, color: themeColor, fontWeight: 900 }}>{step}</span>
-        <h2 style={{ fontSize: 16, fontWeight: 900, color: textCol, margin: 0 }}>{title}</h2>
+        <span
+          style={{
+            fontSize: 16,
+            color: themeColor,
+            fontWeight: 900,
+            background: `${themeColor}16`,
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {step}
+        </span>
+        <h2 style={{ fontSize: 16, fontWeight: 900, color: textCol, margin: 0 , fontFamily: BRAND.fontHeading }}>{title}</h2>
       </div>
       {children}
     </div>
@@ -1039,13 +1215,14 @@ function Empty({ text, subCol }: { text: string; subCol: string }) {
 }
 
 function StatCard({
-  title, value, sub, color, icon,
+  title, value, sub, color, icon, T,
 }: {
   title: string
   value: string | number
   sub: string
   color: string
   icon: string
+  T: ThemePalette
 }) {
   return (
     <div
@@ -1072,7 +1249,18 @@ function StatCard({
         >
           {icon}
         </div>
-        <span style={{ fontSize: 12, fontWeight: 800, color }}>{title}</span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color,
+            background: `${color}14`,
+            padding: '2px 8px',
+            borderRadius: 6,
+          }}
+        >
+          {title}
+        </span>
       </div>
       <div style={{ fontSize: 24, fontWeight: 900, color: T.titleCol, marginBottom: 4 }}>{value}</div>
       <div style={{ fontSize: 12, color: T.subCol }}>{sub}</div>

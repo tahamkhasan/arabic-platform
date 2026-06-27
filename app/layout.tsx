@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cairo, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const cairo = Cairo({
+  variable: "--font-cairo",
+  subsets: ["arabic", "latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "مِداد — تعلّم بذكاء",
-  description: "منصة مِداد التعليمية — شرح ذكي، اختبارات تفاعلية، بطاقات حفظ، ومتابعة أداء للمعلم والطالب",
+  description:
+    "منصة مِداد التعليمية — شرح ذكي، اختبارات تفاعلية، بطاقات حفظ، ومتابعة أداء للمعلم والطالب",
 };
 
 export default function RootLayout({
@@ -26,9 +31,16 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${cairo.variable} ${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body
+        className="min-h-full flex flex-col"
+        style={{
+          fontFamily: 'var(--font-cairo), var(--font-inter), system-ui, sans-serif',
+        }}
+      >
+        {children}
+      </body>
     </html>
   );
 }

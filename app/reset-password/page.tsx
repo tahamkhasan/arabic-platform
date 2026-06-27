@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MidadLogo from '@/components/MidadLogo'
 
@@ -51,11 +51,16 @@ function getPasswordStrength(password: string) {
   return { label: 'قوية', color: '#437A22', width: '100%' }
 }
 
-export default function ResetPasswordPage() {
+// ══════════════════════════════════════════════════════════════
+// المكوّن الداخلي — يحتوي useSearchParams() ويُغلَّف بـ Suspense
+// ══════════════════════════════════════════════════════════════
+function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const token = searchParams.get('token') || ''
+  const [accessToken, setAccessToken] = useState('')
+  const [refreshToken, setRefreshToken] = useState('')
+  const [tokensReady, setTokensReady] = useState(false)
 
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -65,14 +70,34 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  useEffect(() => {
+    const queryAccess = searchParams.get('access_token') || ''
+    const queryRefresh = searchParams.get('refresh_token') || ''
+
+    let hashAccess = ''
+    let hashRefresh = ''
+
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      hashAccess = hash.get('access_token') || ''
+      hashRefresh = hash.get('refresh_token') || ''
+    }
+
+    setAccessToken(queryAccess || hashAccess)
+    setRefreshToken(queryRefresh || hashRefresh)
+    setTokensReady(true)
+  }, [searchParams])
+
   const strength = useMemo(() => getPasswordStrength(password), [password])
 
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
+  const hasValidTokens = !!accessToken && !!refreshToken
+
   async function handleReset() {
-    if (!token) {
-      setError('رابط إعادة التعيين غير صالح أو منتهي')
+    if (!hasValidTokens) {
+      setError('رابط إعادة التعيين غير صالح أو منتهي الصلاحية')
       return
     }
 
@@ -103,20 +128,24 @@ export default function ResetPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({
+          password,
+          accessToken,
+          refreshToken,
+        }),
       })
 
-      const data = await res.json()
+      const data = await res.json().catch(() => null)
 
       if (!res.ok) {
-        setError(data.error || 'تعذر إعادة تعيين كلمة المرور')
+        setError(data?.error || 'تعذر إعادة تعيين كلمة المرور')
         return
       }
 
       setSuccess(true)
 
       setTimeout(() => {
-        router.push('/login')
+        router.replace('/login')
       }, 1800)
     } catch {
       setError('حدث خطأ غير متوقع، حاول مرة أخرى')
@@ -140,7 +169,7 @@ export default function ResetPasswordPage() {
             radial-gradient(circle at 80% 80%, rgba(231,169,59,0.09), transparent 24%),
             ${C.bg}
           `,
-          fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+          fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -195,7 +224,7 @@ export default function ResetPasswordPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(67,122,34,0.10)',
+              background: C.successBg,
               border: `1px solid ${C.successBorder}`,
               fontSize: 34,
             }}
@@ -214,7 +243,7 @@ export default function ResetPasswordPage() {
           </p>
 
           <button
-            onClick={() => router.push('/login')}
+            onClick={() => router.replace('/login')}
             style={{
               width: '100%',
               padding: 14,
@@ -250,7 +279,7 @@ export default function ResetPasswordPage() {
           radial-gradient(circle at 80% 80%, rgba(231,169,59,0.09), transparent 24%),
           ${C.bg}
         `,
-        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -394,7 +423,7 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        {!token && (
+        {tokensReady && !hasValidTokens && (
           <div
             className="a3"
             style={{
@@ -409,7 +438,7 @@ export default function ResetPasswordPage() {
               lineHeight: 1.8,
             }}
           >
-            الرابط غير مكتمل، تأكد من فتح الصفحة من البريد الإلكتروني
+            الرابط غير مكتمل أو منتهي الصلاحية، تأكد من فتح الصفحة من البريد الإلكتروني مباشرة
           </div>
         )}
 
@@ -557,20 +586,20 @@ export default function ResetPasswordPage() {
 
           <button
             onClick={handleReset}
-            disabled={loading || !token}
+            disabled={loading || !hasValidTokens}
             className="btn-main a5"
             style={{
               width: '100%',
               padding: 14,
               borderRadius: 14,
               border: 'none',
-              cursor: loading || !token ? 'not-allowed' : 'pointer',
-              background: loading || !token ? 'rgba(192,57,43,0.18)' : C.primaryGrad,
+              cursor: loading || !hasValidTokens ? 'not-allowed' : 'pointer',
+              background: loading || !hasValidTokens ? 'rgba(192,57,43,0.18)' : C.primaryGrad,
               color: '#fff',
               fontWeight: 900,
               fontSize: 15,
               fontFamily: 'inherit',
-              boxShadow: !loading && token ? C.shadowBtn : 'none',
+              boxShadow: !loading && hasValidTokens ? C.shadowBtn : 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -599,7 +628,7 @@ export default function ResetPasswordPage() {
 
           <button
             className="btn-sub a5"
-            onClick={() => router.push('/login')}
+            onClick={() => router.replace('/login')}
             style={{
               width: '100%',
               padding: 13,
@@ -618,5 +647,40 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// fallback بسيط مطابق لهوية مِداد — يظهر خلال التحميل الأولي
+// ══════════════════════════════════════════════════════════════
+function ResetPasswordFallback() {
+  return (
+    <div
+      dir="rtl"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: C.bg,
+        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+        color: C.sub,
+        fontSize: 14,
+      }}
+    >
+      ⏳ جارٍ التحميل...
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// التصدير الرئيسي للصفحة — يُغلِّف النموذج بـ Suspense
+// مطلوب لأن useSearchParams() يحتاج حدّ Suspense صريح في Next.js
+// ══════════════════════════════════════════════════════════════
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<ResetPasswordFallback />}>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }

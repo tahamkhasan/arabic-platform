@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase'
+﻿import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const RATE_LIMIT_MAX    = 10  // أقصى عدد طلبات
 const RATE_LIMIT_WINDOW = 60  // النافذة الزمنية بالثواني

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { BRAND } from '@/lib/constants/theme'
 
 interface Notification {
   id:         string
@@ -40,6 +41,7 @@ export default function NotificationBell({
 
   // ── جلب الإشعارات ─────────────────────────────────────────────
   async function fetchNotifications() {
+    if (!userId) return
     const res = await fetch(`/api/notifications?userId=${userId}`)
     const data = await res.json()
     setNotifications(data.notifications ?? [])
@@ -47,6 +49,7 @@ export default function NotificationBell({
   }
 
   useEffect(() => {
+    if (!userId) return
     fetchNotifications()
     const iv = setInterval(fetchNotifications, 30000) // كل 30 ثانية
     return () => clearInterval(iv)
@@ -65,6 +68,7 @@ export default function NotificationBell({
 
   // ── تعليم كمقروء ──────────────────────────────────────────────
   async function markRead(notificationId?: string) {
+    if (!userId) return
     await fetch('/api/notifications', {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -110,7 +114,7 @@ export default function NotificationBell({
         {unread > 0 && (
           <span style={{
             position: 'absolute', top: 4, right: 4,
-            background: '#fc8181', color: '#fff',
+            background: BRAND.crimson, color: '#fff',
             width: 16, height: 16, borderRadius: '50%',
             fontSize: 9, fontWeight: 900,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -126,9 +130,9 @@ export default function NotificationBell({
           position: 'absolute', top: '110%', left: 0,
           width: 340, maxHeight: 480,
           borderRadius: 16, overflow: 'hidden',
-          background: isDark ? '#1a1630' : '#fff',
+          background: isDark ? '#241F1A' : '#fff',
           border: `1.5px solid ${borderCol}`,
-          boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+          boxShadow: '0 20px 40px rgba(31,18,21,0.35)',
           zIndex: 200,
         }}>
           {/* رأس القائمة */}

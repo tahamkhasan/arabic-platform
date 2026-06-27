@@ -1,62 +1,81 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, CSSProperties, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ar } from '@/lib/constants/ar'
+import { BRAND } from '@/lib/constants/theme'
+import { supabase } from '@/lib/supabase'
+import {
+  STAGE_LABELS,
+  GRADES_BY_STAGE,
+  TRACK_LABELS,
+  StageKey,
+  TrackKey,
+} from '@/lib/constants/stages'
 import MarkdownRendererRaw from '@/components/MarkdownRenderer'
 import QuizPlayer from '@/components/QuizPlayer'
 import FlashcardPlayer from '@/components/FlashcardPlayer'
 import NotificationBell from '@/components/NotificationBell'
+import SubjectCardNew from '@/components/student/SubjectCard'
 
 const MarkdownRenderer = MarkdownRendererRaw as any
 const c = ar.common
 
 const T = {
-  bg: '#F5F0E8',
-  pageBg: '#F7F2EA',
-  sectionBg: '#FBF8F2',
-  cardBg: '#FFFDF9',
-  cardSoft: '#F3E8DE',
-  headerBg: 'rgba(245,240,232,0.94)',
-  sidebarBg: '#F1E8DD',
+  bg: BRAND.bg,
+  pageBg: BRAND.bgSoft,
+  sectionBg: BRAND.bgSoft,
+  cardBg: BRAND.bgSoft,
+  cardSoft: BRAND.bgSoft,
+  headerBg: 'rgba(247,242,234,0.94)',
+  sidebarBg: BRAND.bgSoft,
 
-  textCol: '#211C17',
-  titleCol: '#1A1221',
-  subCol: '#6E6258',
-  mutedCol: '#8A7B70',
+  textCol: BRAND.text,
+  titleCol: BRAND.text,
+  subCol: BRAND.sub,
+  mutedCol: BRAND.muted,
 
-  borderCol: '#E8DDCF',
-  borderSoft: 'rgba(192,57,43,0.10)',
-  inputBg: '#FFF9F3',
-  inputBorder: '#E5D7C8',
+  borderCol: BRAND.border,
+  borderSoft: BRAND.border,
+  inputBg: '#FFFFFF',
+  inputBorder: BRAND.border,
 
-  primary: '#D96B2B',
-  primaryHover: '#BF5A20',
-  primarySoft: '#F3E0D2',
-  primaryDeep: '#C0392B',
+  primary: BRAND.red,
+  primaryHover: BRAND.crimson,
+  primarySoft: 'rgba(140,20,40,0.08)',
+  primaryDeep: BRAND.deep,
+  deep: BRAND.deep,
+  red: BRAND.red,
 
-  gold: '#F4A420',
+  gold: BRAND.gold,
   blue: '#2563EB',
   blueDark: '#1D4ED8',
-  green: '#4D7C3A',
+  green: BRAND.gold,
 
-  gradMain: 'linear-gradient(135deg,#C0392B,#E07020)',
-  gradBlue: 'linear-gradient(135deg,#2563EB,#1D4ED8)',
-  gradWarm: 'linear-gradient(135deg,#F7E5D3,#FFF9F3)',
+  gradMain: BRAND.gradMain,
+  gradBlue: BRAND.gradBlue,
+  gradWarm: `linear-gradient(135deg, rgba(220,100,40,0.10), ${BRAND.bgSoft})`,
 
-  shadowSoft: '0 8px 30px rgba(73,44,24,0.08)',
-  shadowCard: '0 10px 24px rgba(60,35,20,0.06)',
-  blueGlow: '0 8px 24px rgba(37,99,235,0.18)',
+  shadowSoft: BRAND.shadow,
+  shadowCard: BRAND.shadowWarm,
+  blueGlow: BRAND.shadowBlue,
+
+  fontHeading: BRAND.fontHeading,
+  fontBody: BRAND.fontBody,
 }
+
+const FIXED_NAV_ACTIVE_COLOR = BRAND.deep
 
 interface User {
   id: string
   name: string
   role: string
   user_type: string
+  status?: string
   theme_color?: string
   allowed_grades?: string[]
   allowed_stages?: string[]
+  track?: string | null
 }
 
 interface Subject {
@@ -65,6 +84,8 @@ interface Subject {
   icon?: string
   grade?: string
   stage?: string
+  teacherName?: string | null
+  unitsCount?: number
 }
 
 interface Unit {
@@ -77,6 +98,9 @@ interface Lesson {
   id: string
   name: string
   content?: string
+  video_url?: string | null
+  video_embed_url?: string | null
+  file_urls?: string[]
 }
 
 interface Assignment {
@@ -89,6 +113,20 @@ interface Assignment {
   subject_id: string
   submitted?: boolean
   grade?: number | null
+}
+
+// ── جديد: الاختبارات التفاعلية المتاحة لفصل الطالب ──────────────
+interface QuizAvailable {
+  id: string
+  title: string
+  description?: string
+  time_limit_minutes?: number
+  attempts_allowed: number
+  questions_count: number
+  attempts_used: number
+  last_score: number | null
+  has_active_attempt: boolean
+  can_attempt: boolean
 }
 
 interface Message {
@@ -146,18 +184,16 @@ const PRACTICE_TOOLS = [
   { id: 'flashcards', icon: '🃏', label: 'بطاقات الحفظ', desc: 'راجع بسرعة وذكاء' },
 ] as const
 
-const ACCENT_COLORS = ['#C0392B', '#E07020', '#F4A420', '#2563EB', '#059669', '#7C3AED']
+const ACCENT_COLORS = [
+  BRAND.deep,
+  BRAND.red,
+  BRAND.crimson,
+  BRAND.orangeRed,
+  BRAND.orange,
+  BRAND.gold,
+]
 
-function getSubjectImage(name: string): string {
-  const n = name.toLowerCase()
-  if (n.includes('عرب') || n.includes('لغة')) return 'https://images.unsplash.com/photo-1589998059171-988d887df646?w=800&q=80&auto=format&fit=crop'
-  if (n.includes('قرآن') || n.includes('إسلام')) return 'https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=800&q=80&auto=format&fit=crop'
-  if (n.includes('رياض') || n.includes('حساب')) return 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800&q=80&auto=format&fit=crop'
-  if (n.includes('علم') || n.includes('فيزياء')) return 'https://images.unsplash.com/photo-1532094349884-543559059c4a?w=800&q=80&auto=format&fit=crop'
-  return 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800&q=80&auto=format&fit=crop'
-}
-
-function Empty({ icon, title, sub }: { icon: string; title: string; sub: string }) {
+const Empty = memo(({ icon, title, sub }: { icon: string; title: string; sub: string }) => {
   return (
     <div
       style={{
@@ -169,14 +205,27 @@ function Empty({ icon, title, sub }: { icon: string; title: string; sub: string 
         boxShadow: T.shadowCard,
       }}
     >
-      <div style={{ fontSize: 46, marginBottom: 12 }}>{icon}</div>
-      <h3 style={{ fontSize: 18, fontWeight: 900, color: T.titleCol, marginBottom: 8 }}>{title}</h3>
-      <p style={{ fontSize: 14, color: T.subCol, lineHeight: 1.8, margin: 0 }}>{sub}</p>
+      <div style={{ fontSize: 46, marginBottom: 14 }}>{icon}</div>
+      <h3
+        style={{
+          fontSize: 18,
+          fontWeight: 900,
+          color: T.titleCol,
+          marginBottom: 8,
+          fontFamily: T.fontHeading,
+        }}
+      >
+        {title}
+      </h3>
+      <p style={{ fontSize: 14, color: T.subCol, lineHeight: 1.8, margin: 0, fontFamily: T.fontBody }}>
+        {sub}
+      </p>
     </div>
   )
-}
+})
+Empty.displayName = 'Empty'
 
-function Card({
+const Card = memo(({
   title,
   sub,
   icon,
@@ -190,7 +239,7 @@ function Card({
   children?: React.ReactNode
   action?: React.ReactNode
   accent?: string
-}) {
+}) => {
   return (
     <section
       style={{
@@ -208,7 +257,7 @@ function Card({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
+          gap: 14,
           background: accent ? `${accent}08` : T.sectionBg,
         }}
       >
@@ -230,8 +279,22 @@ function Card({
             </div>
           )}
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: T.titleCol }}>{title}</h3>
-            {sub && <p style={{ margin: '4px 0 0', fontSize: 13, color: T.subCol }}>{sub}</p>}
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 900,
+                color: T.titleCol,
+                fontFamily: T.fontHeading,
+              }}
+            >
+              {title}
+            </h3>
+            {sub && (
+              <p style={{ margin: '4px 0 0', fontSize: 14, color: T.subCol, fontFamily: T.fontBody }}>
+                {sub}
+              </p>
+            )}
           </div>
         </div>
         {action}
@@ -239,9 +302,10 @@ function Card({
       <div style={{ padding: 18 }}>{children}</div>
     </section>
   )
-}
+})
+Card.displayName = 'Card'
 
-function StatCard({
+const StatCard = memo(({
   title,
   value,
   sub,
@@ -253,7 +317,7 @@ function StatCard({
   sub: string
   color: string
   icon: string
-}) {
+}) => {
   return (
     <div
       style={{
@@ -264,7 +328,14 @@ function StatCard({
         boxShadow: T.shadowCard,
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 14,
+        }}
+      >
         <div
           style={{
             width: 42,
@@ -279,19 +350,29 @@ function StatCard({
         >
           {icon}
         </div>
-        <span style={{ fontSize: 12, fontWeight: 800, color }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 900, color, fontFamily: T.fontBody }}>{title}</span>
       </div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: T.titleCol, marginBottom: 6 }}>{value}</div>
-      <div style={{ fontSize: 13, color: T.subCol }}>{sub}</div>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 900,
+          color: T.titleCol,
+          marginBottom: 6,
+          fontFamily: T.fontHeading,
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ fontSize: 14, color: T.subCol, fontFamily: T.fontBody }}>{sub}</div>
     </div>
   )
-}
-
+})
+StatCard.displayName = 'StatCard'
 export default function StudentPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<User | null>(null)
-  const [accentColor, setAccentColor] = useState(T.primaryDeep)
+  const [accentColor, setAccentColor] = useState<string>(T.primaryDeep)
   const [showSettings, setShowSettings] = useState(false)
   const [savingSet, setSavingSet] = useState(false)
   const [tab, setTab] = useState<Tab>('home')
@@ -324,6 +405,10 @@ export default function StudentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitDone, setSubmitDone] = useState(false)
 
+  // ── جديد: الاختبارات التفاعلية المتاحة + توكن Supabase ────────
+  const [quizzesAvailable, setQuizzesAvailable] = useState<QuizAvailable[]>([])
+  const [accessToken, setAccessToken] = useState('')
+
   const [messages, setMessages] = useState<Message[]>([])
   const [newMsg, setNewMsg] = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
@@ -333,6 +418,11 @@ export default function StudentPage() {
   const [media, setMedia] = useState<Media[]>([])
   const [openMedia, setOpenMedia] = useState<Media | null>(null)
 
+  const [selectedStage, setSelectedStage] = useState<StageKey | null>(null)
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
+  const [selectedTrack, setSelectedTrack] = useState<TrackKey | null>(null)
+
+  // تحميل المستخدم من localStorage
   useEffect(() => {
     const saved = localStorage.getItem('mosaed_user')
     if (!saved) {
@@ -349,18 +439,34 @@ export default function StudentPage() {
         router.replace('/dashboard')
         return
       }
+      if (u.status === 'pending' || u.status === 'suspended') {
+        router.replace('/pending-approval')
+        return
+      }
       setUser(u)
       if (u.theme_color) setAccentColor(u.theme_color)
+
+      const stage = (u.allowed_stages && u.allowed_stages[0]) as StageKey | undefined
+      const grade = u.allowed_grades && u.allowed_grades[0]
+
+      if (stage) setSelectedStage(stage)
+      if (grade) setSelectedGrade(grade)
+
+      if (stage === 'secondary' && (u.track === 'scientific' || u.track === 'literary')) {
+        setSelectedTrack(u.track as TrackKey)
+      }
     } catch {
       router.replace('/')
     }
   }, [router])
 
+  // جلب المواد النهائية الفعلية للطالب
   useEffect(() => {
     if (!user) return
-    fetch('/api/subjects')
+    fetch(`/api/students/${user.id}/subjects`)
       .then(r => r.json())
       .then(d => setSubjects(d.subjects ?? []))
+      .catch(() => setSubjects([]))
   }, [user])
 
   useEffect(() => {
@@ -391,6 +497,24 @@ export default function StudentPage() {
       .then(r => r.json())
       .then(d => setAssignments(d.assignments ?? []))
   }, [user, tab])
+
+  // ── جديد: جلب access_token من جلسة Supabase الحقيقية —
+  // مطلوب لاستدعاء /api/quizzes/available (Bearer auth) ──────────
+  useEffect(() => {
+    if (!user) return
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.access_token) setAccessToken(data.session.access_token)
+    })
+  }, [user])
+
+  // ── جديد: جلب الاختبارات المتاحة عند فتح تبويب "مهامي" ─────────
+  useEffect(() => {
+    if (!accessToken || tab !== 'assignments') return
+    fetch('/api/quizzes/available', { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(r => r.json())
+      .then(d => setQuizzesAvailable(d.quizzes ?? []))
+      .catch(() => setQuizzesAvailable([]))
+  }, [accessToken, tab])
 
   useEffect(() => {
     if (!user || tab !== 'messages') return
@@ -442,6 +566,12 @@ export default function StudentPage() {
       setSavingSet(false)
       setShowSettings(false)
     }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('mosaed_user')
+    localStorage.removeItem('mosaed_session')
+    router.replace('/')
   }
 
   async function handlePractice() {
@@ -564,7 +694,7 @@ export default function StudentPage() {
       if (res.ok) {
         setSubmitDone(true)
         setAssignments(prev =>
-          prev.map(a => (a.id === openAssign.id ? { ...a, submitted: true } : a))
+          prev.map(a => (a.id === openAssign.id ? { ...a, submitted: true } : a)),
         )
       }
     } finally {
@@ -605,7 +735,6 @@ export default function StudentPage() {
   const completedAssignments = assignments.filter(a => a.submitted).length
   const currentLessonName = selLesson?.name ?? 'اختر درساً لتبدأ'
   const currentSubjectName = selSubject?.name ?? 'المادة غير محددة'
-
   return (
     <div
       dir="rtl"
@@ -613,10 +742,11 @@ export default function StudentPage() {
         minHeight: '100vh',
         background: `linear-gradient(180deg, ${T.bg} 0%, ${T.pageBg} 100%)`,
         color: T.textCol,
-        fontFamily: 'inherit',
+        fontFamily: T.fontBody,
         paddingBottom: 90,
       }}
     >
+      {/* الهيدر */}
       <header
         style={{
           position: 'sticky',
@@ -629,16 +759,16 @@ export default function StudentPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: 1400,
             margin: '0 auto',
             padding: '14px 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 12,
+            gap: 14,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
               style={{
                 width: 44,
@@ -652,38 +782,66 @@ export default function StudentPage() {
                 fontWeight: 900,
                 boxShadow: T.shadowSoft,
                 fontSize: 18,
+                fontFamily: T.fontHeading,
               }}
             >
               م
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: T.titleCol }}>مِداد</div>
-              <div style={{ fontSize: 12, color: T.subCol }}>لوحة الطالب</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: T.titleCol, fontFamily: T.fontHeading }}>
+                مِداد
+              </div>
+              <div style={{ fontSize: 14, color: T.subCol, fontFamily: T.fontBody }}>لوحة الطالب</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <NotificationBell {...({ count: unreadCount } as any)} />
+            <NotificationBell
+              userId={user?.id ?? ''}
+              themeColor={accentColor}
+              textCol={T.textCol}
+              subCol={T.subCol}
+              cardBg={T.cardBg}
+              borderCol={T.borderCol}
+              inputBg={T.inputBg}
+              isDark={false}
+            />
             <button
               onClick={() => setShowSettings(true)}
               style={{
                 padding: '10px 14px',
-                borderRadius: 12,
+                borderRadius: 14,
                 border: `1px solid ${T.borderCol}`,
                 background: T.cardBg,
                 color: T.textCol,
                 fontWeight: 800,
                 cursor: 'pointer',
-                fontFamily: 'inherit',
+                fontFamily: T.fontBody,
               }}
             >
               ⚙️ الإعدادات
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 14,
+                border: '1px solid rgba(252,149,149,0.4)',
+                background: 'rgba(252,149,149,0.1)',
+                color: '#fc8181',
+                fontWeight: 800,
+                cursor: 'pointer',
+                fontFamily: T.fontBody,
+              }}
+            >
+              🚪 خروج
             </button>
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 16px 0' }}>
+      <main style={{ maxWidth: 1400, margin: '0 auto', padding: '22px 16px 0' }}>
+        {/* الهيرو */}
         <section
           style={{
             background: T.gradWarm,
@@ -731,9 +889,10 @@ export default function StudentPage() {
                   fontSize: 13,
                   fontWeight: 800,
                   marginBottom: 16,
+                  fontFamily: T.fontBody,
                 }}
               >
-                ✨ رحلة تعلم أوضح مع مِداد
+                ✨ رحلة تعلم ممتعة مع مِداد
               </div>
 
               <h1
@@ -743,11 +902,25 @@ export default function StudentPage() {
                   lineHeight: 1.35,
                   fontWeight: 900,
                   color: T.titleCol,
+                  fontFamily: T.fontHeading,
                 }}
               >
-                أهلاً {user?.name || 'بك'}،
+                أهلاً {user?.name || 'بك'},
                 <br />
-                <span style={{ color: accentColor }}>ابدأ درس اليوم</span> وواصل تقدّمك بثقة.
+                <span
+                  style={{
+                      color: T.red,
+    background: `${T.red}10`,
+    padding: '2px 10px',
+    borderRadius: 10,
+    boxDecorationBreak: 'clone',
+    WebkitBoxDecorationBreak: 'clone',
+    fontWeight: 900,
+                  }}
+                >
+                  ابدأ درسك اليوم
+                </span>{' '}
+                وواصل تقدّمك بثقة.
               </h1>
 
               <p
@@ -757,13 +930,14 @@ export default function StudentPage() {
                   lineHeight: 1.9,
                   color: T.subCol,
                   maxWidth: 650,
+                  fontFamily: T.fontBody,
                 }}
               >
-                مِداد تجعل التعلم أبسط: اختر المادة، افتح الدرس، تدرّب تفاعلياً، ثم راجع أخطاءك
-                ونتيجتك في مكان واحد.
+                مِداد تجعل التعلم أبسط: اختر المادة، افتح الدرس، تدرّب تفاعلياً، ثم راجع
+                أخطاءك ونتيجتك في مكان واحد.
               </p>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 18 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 18 }}>
                 <button
                   onClick={() => setTab('practice')}
                   style={{
@@ -775,8 +949,8 @@ export default function StudentPage() {
                     fontWeight: 900,
                     fontSize: 15,
                     cursor: 'pointer',
-                    boxShadow: `0 12px 24px ${accentColor}25`,
-                    fontFamily: 'inherit',
+                    boxShadow: `0 14px 24px ${accentColor}25`,
+                    fontFamily: T.fontBody,
                   }}
                 >
                   ابدأ التدريب الآن
@@ -792,7 +966,7 @@ export default function StudentPage() {
                     fontWeight: 900,
                     fontSize: 15,
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: T.fontBody,
                   }}
                 >
                   افتح دروسي
@@ -804,7 +978,7 @@ export default function StudentPage() {
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2,minmax(0,1fr))',
-                gap: 12,
+                gap: 14,
               }}
             >
               <StatCard
@@ -839,6 +1013,7 @@ export default function StudentPage() {
           </div>
         </section>
 
+        {/* تبويب الرئيسية */}
         {tab === 'home' && (
           <div style={{ display: 'grid', gap: 18 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 18 }}>
@@ -852,9 +1027,28 @@ export default function StudentPage() {
                       background: T.sectionBg,
                     }}
                   >
-                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6 }}>الدرس المحدد حالياً</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: T.titleCol }}>{currentLessonName}</div>
-                    <div style={{ fontSize: 14, color: T.subCol, marginTop: 8, lineHeight: 1.8 }}>
+                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6, fontFamily: T.fontBody }}>
+                      الدرس المحدد حالياً
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 900,
+                        color: T.titleCol,
+                        fontFamily: T.fontHeading,
+                      }}
+                    >
+                      {currentLessonName}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        color: T.subCol,
+                        marginTop: 8,
+                        lineHeight: 1.8,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
                       {selLesson?.content?.slice(0, 180)
                         ? selLesson.content.slice(0, 180) + '...'
                         : 'اختر مادة ووحدة ودرساً من تبويب "دروسي" حتى تبدأ الشرح والتدريب.'}
@@ -865,14 +1059,14 @@ export default function StudentPage() {
                     <button
                       onClick={() => setTab('lessons')}
                       style={{
-                        padding: '12px 18px',
+                        padding: '14px 18px',
                         borderRadius: 14,
                         border: 'none',
                         background: T.gradMain,
                         color: '#fff',
                         fontWeight: 900,
                         cursor: 'pointer',
-                        fontFamily: 'inherit',
+                        fontFamily: T.fontBody,
                       }}
                     >
                       افتح الدروس
@@ -880,14 +1074,14 @@ export default function StudentPage() {
                     <button
                       onClick={() => setTab('practice')}
                       style={{
-                        padding: '12px 18px',
+                        padding: '14px 18px',
                         borderRadius: 14,
                         border: `1px solid ${T.borderCol}`,
                         background: T.cardBg,
                         color: T.textCol,
                         fontWeight: 800,
                         cursor: 'pointer',
-                        fontFamily: 'inherit',
+                        fontFamily: T.fontBody,
                       }}
                     >
                       اذهب للتدريب
@@ -897,17 +1091,28 @@ export default function StudentPage() {
               </Card>
 
               <Card title="تقدّمي هذا الأسبوع" sub="متابعة سريعة" icon="📈">
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 14 }}>
                   <div
                     style={{
                       borderRadius: 16,
-                      background: `${T.green}12`,
+                      background: `${T.green}14`,
                       border: `1px solid ${T.green}22`,
                       padding: 14,
                     }}
                   >
-                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6 }}>المهام المكتملة</div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: T.titleCol }}>{completedAssignments}</div>
+                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6, fontFamily: T.fontBody }}>
+                      المهام المكتملة
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 900,
+                        color: T.titleCol,
+                        fontFamily: T.fontHeading,
+                      }}
+                    >
+                      {completedAssignments}
+                    </div>
                   </div>
 
                   <div
@@ -918,8 +1123,19 @@ export default function StudentPage() {
                       padding: 14,
                     }}
                   >
-                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6 }}>رسائل بانتظارك</div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: T.titleCol }}>{unreadCount}</div>
+                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6, fontFamily: T.fontBody }}>
+                      رسائل بانتظارك
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 900,
+                        color: T.titleCol,
+                        fontFamily: T.fontHeading,
+                      }}
+                    >
+                      {unreadCount}
+                    </div>
                   </div>
 
                   <div
@@ -930,8 +1146,17 @@ export default function StudentPage() {
                       padding: 14,
                     }}
                   >
-                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6 }}>أولوية اليوم</div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: T.titleCol }}>
+                    <div style={{ fontSize: 13, color: T.subCol, marginBottom: 6, fontFamily: T.fontBody }}>
+                      أولوية اليوم
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
+                        color: T.titleCol,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
                       {selLesson ? 'أكمل التدريب على الدرس المختار' : 'اختر أول درس لتبدأ رحلتك'}
                     </div>
                   </div>
@@ -939,23 +1164,37 @@ export default function StudentPage() {
               </Card>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 18 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3,minmax(0,1fr))',
+                gap: 18,
+              }}
+            >
               <Card title="ابدأ بسرعة" sub="أفضل نقطة بداية" icon="⚡">
-                <div style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9, marginBottom: 14 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: T.subCol,
+                    lineHeight: 1.9,
+                    marginBottom: 14,
+                    fontFamily: T.fontBody,
+                  }}
+                >
                   افتح الدرس ثم انتقل مباشرة إلى الاختبار التفاعلي أو بطاقات الحفظ.
                 </div>
                 <button
                   onClick={() => setTab('practice')}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '14px 16px',
                     borderRadius: 14,
                     border: 'none',
                     background: T.gradBlue,
                     color: '#fff',
                     fontWeight: 900,
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: T.fontBody,
                     boxShadow: T.blueGlow,
                   }}
                 >
@@ -964,27 +1203,36 @@ export default function StudentPage() {
               </Card>
 
               <Card title="مراجعة أخطائي" sub="ذكّر نفسك بما يحتاج تركيزًا" icon="🧠">
-                <div style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9 }}>
-                  بعد إنهاء الاختبارات القصيرة، اجعل هذه المساحة لاحقاً مخصصة لأكثر الأخطاء تكراراً.
+                <div style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9, fontFamily: T.fontBody }}>
+                  بعد إنهاء الاختبارات القصيرة، اجعل هذه المساحة لاحقاً مخصصة لأكثر الأخطاء
+                  تكراراً.
                 </div>
               </Card>
 
               <Card title="تواصل مع المعلّم" sub="إن احتجت توضيحاً" icon="💬">
-                <div style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9, marginBottom: 14 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: T.subCol,
+                    lineHeight: 1.9,
+                    marginBottom: 14,
+                    fontFamily: T.fontBody,
+                  }}
+                >
                   أرسل سؤالك بسرعة من تبويب الرسائل وتابع الردود من معلمك.
                 </div>
                 <button
                   onClick={() => setTab('messages')}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '14px 16px',
                     borderRadius: 14,
                     border: `1px solid ${T.borderCol}`,
                     background: T.cardBg,
                     color: T.textCol,
                     fontWeight: 900,
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: T.fontBody,
                   }}
                 >
                   افتح الرسائل
@@ -994,222 +1242,94 @@ export default function StudentPage() {
           </div>
         )}
 
-        {tab === 'lessons' && (
-          <div style={{ display: 'grid', gap: 18 }}>
-            <Card title="اختيار المادة والوحدة والدرس" sub="ابدأ من هنا لتحديد مسار تعلمك" icon="📚" accent={accentColor}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
-                <select
-                  value={selSubject?.id ?? ''}
-                  onChange={e => {
-                    const subject = subjects.find(s => s.id === e.target.value) || null
-                    setSelSubject(subject)
-                    setSelUnit(null)
-                    setSelLesson(null)
-                  }}
-                  style={selectStyle()}
-                >
-                  <option value="">اختر المادة</option>
-                  {subjects.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={selUnit?.id ?? ''}
-                  onChange={e => {
-                    const unit = units.find(u => u.id === e.target.value) || null
-                    setSelUnit(unit)
-                    setSelLesson(null)
-                  }}
-                  style={selectStyle()}
-                >
-                  <option value="">اختر الوحدة</option>
-                  {units.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={selLesson?.id ?? ''}
-                  onChange={e => {
-                    const lesson = lessons.find(l => l.id === e.target.value) || null
-                    setSelLesson(lesson)
-                  }}
-                  style={selectStyle()}
-                >
-                  <option value="">اختر الدرس</option>
-                  {lessons.map(l => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </Card>
-
-            {selSubject && (
-              <Card
-                title={selSubject.name}
-                sub={`${selSubject.stage ?? ''} ${selSubject.grade ?? ''}`}
-                icon="🖼️"
-              >
-                <div
-                  style={{
-                    height: 220,
-                    borderRadius: 18,
-                    overflow: 'hidden',
-                    border: `1px solid ${T.borderCol}`,
-                    background: T.sectionBg,
-                  }}
-                >
-                  <img
-                    src={getSubjectImage(selSubject.name)}
-                    alt={selSubject.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                </div>
-              </Card>
-            )}
-
-            {selLesson ? (
-              <Card title={selLesson.name} sub="محتوى الدرس" icon="📖">
-                <MarkdownRenderer content={selLesson.content || 'لا توجد مادة علمية لهذا الدرس بعد.'} />
-              </Card>
-            ) : (
-              <Empty icon="📚" title="لم تختر درسًا بعد" sub="اختر المادة والوحدة والدرس حتى يظهر المحتوى هنا." />
-            )}
-          </div>
-        )}
-
-        {tab === 'practice' && (
-          <div style={{ display: 'grid', gap: 18 }}>
-            <Card title="التدرّب على الدرس" sub="اختر الأداة التي تناسبك" icon="✨" accent={accentColor}>
-              {!selLesson && (
-                <div
-                  style={{
-                    marginBottom: 18,
-                    padding: 14,
-                    borderRadius: 16,
-                    background: `${T.gold}12`,
-                    border: `1px solid ${T.gold}30`,
-                    color: T.subCol,
-                    fontSize: 14,
-                  }}
-                >
-                  اختر درسًا أولاً من تبويب "دروسي" لتفعيل أدوات التدريب.
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 12 }}>
-                {PRACTICE_TOOLS.map(tool => {
-                  const active = practiceTool === tool.id
-                  return (
-                    <button
-                      key={tool.id}
-                      onClick={() => setPracticeTool(tool.id)}
-                      style={{
-                        textAlign: 'right',
-                        padding: 16,
-                        borderRadius: 18,
-                        border: `1px solid ${active ? accentColor + '33' : T.borderCol}`,
-                        background: active ? `${accentColor}0F` : T.cardBg,
-                        boxShadow: active ? `0 10px 24px ${accentColor}14` : 'none',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      <div style={{ fontSize: 22, marginBottom: 10 }}>{tool.icon}</div>
-                      <div style={{ fontSize: 15, fontWeight: 900, color: T.titleCol, marginBottom: 4 }}>{tool.label}</div>
-                      <div style={{ fontSize: 12, color: T.subCol }}>{tool.desc}</div>
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                <button
-                  onClick={handlePractice}
-                  disabled={!selLesson || !practiceTool || practiceLoading || quizLoading || flashLoading}
-                  style={{
-                    padding: '13px 22px',
-                    borderRadius: 14,
-                    border: 'none',
-                    background: !selLesson || !practiceTool ? T.borderCol : T.gradMain,
-                    color: !selLesson || !practiceTool ? T.subCol : '#fff',
-                    fontWeight: 900,
-                    cursor: !selLesson || !practiceTool ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {practiceLoading || quizLoading || flashLoading ? '⏳ جارٍ التحضير...' : 'ابدأ التمرين'}
-                </button>
-              </div>
-            </Card>
-
-            {practiceError && (
-              <div
-                style={{
-                  background: '#FFF4F1',
-                  border: `1px solid ${T.primaryDeep}22`,
-                  color: T.primaryDeep,
-                  padding: 14,
-                  borderRadius: 16,
-                  fontSize: 14,
-                }}
-              >
-                {practiceError}
-              </div>
-            )}
-
-            {quizError && (
-              <div
-                style={{
-                  background: '#FFF4F1',
-                  border: `1px solid ${T.primaryDeep}22`,
-                  color: T.primaryDeep,
-                  padding: 14,
-                  borderRadius: 16,
-                  fontSize: 14,
-                }}
-              >
-                {quizError}
-              </div>
-            )}
-
-            {flashError && (
-              <div
-                style={{
-                  background: '#FFF4F1',
-                  border: `1px solid ${T.primaryDeep}22`,
-                  color: T.primaryDeep,
-                  padding: 14,
-                  borderRadius: 16,
-                  fontSize: 14,
-                }}
-              >
-                {flashError}
-              </div>
-            )}
-
-            {practiceOutput && (
-              <Card title="نتيجة التدريب" sub="محتوى مولّد لك حسب الدرس" icon="🧾">
-                <MarkdownRenderer content={practiceOutput} />
-              </Card>
-            )}
-          </div>
-        )}
-
+        {/* تبويب المهام — جديد: يضم "اختباراتي" + "مهامي" معاً */}
         {tab === 'assignments' && (
           <div style={{ display: 'grid', gap: 18 }}>
-            <Card title="مهامي" sub="المهام التي تنتظر الإنجاز أو التسليم" icon="📝" accent={accentColor}>
-              {assignments.length === 0 ? (
-                <Empty icon="🗂️" title="لا توجد مهام حالياً" sub="عندما يرسل المعلم مهاماً جديدة ستظهر هنا." />
+            {/* ── جديد: قسم الاختبارات التفاعلية ── */}
+            <Card
+              title="اختباراتي"
+              sub="الاختبارات التفاعلية المتاحة لفصلك"
+              icon="🎯"
+              accent={accentColor}
+            >
+              {quizzesAvailable.length === 0 ? (
+                <Empty
+                  icon="🎯"
+                  title="لا توجد اختبارات بعد"
+                  sub="عندما ينشر معلمك اختباراً جديداً سيظهر هنا."
+                />
               ) : (
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 14 }}>
+                  {quizzesAvailable.map(q => {
+                    const exhausted = !q.can_attempt
+                    return (
+                      <div
+                        key={q.id}
+                        style={{
+                          background: T.cardBg,
+                          border: `1px solid ${q.last_score !== null ? T.green + '28' : T.borderCol}`,
+                          borderRadius: 18,
+                          padding: 16,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 16,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: T.titleCol, marginBottom: 6, fontFamily: T.fontHeading }}>
+                            {q.title}
+                          </div>
+                          <div style={{ fontSize: 13, color: T.subCol, marginBottom: 4, fontFamily: T.fontBody }}>
+                            {q.questions_count} سؤال
+                            {q.time_limit_minutes ? ` • ⏰ ${q.time_limit_minutes} دقيقة` : ''}
+                            {' • '}المحاولات: {q.attempts_used}/{q.attempts_allowed}
+                          </div>
+                          {q.last_score !== null && (
+                            <div style={{ fontSize: 14, color: T.green, fontWeight: 800, fontFamily: T.fontBody }}>
+                              آخر نتيجة: {q.last_score}%
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => router.push(`/student/quizzes/${q.id}`)}
+                          disabled={exhausted}
+                          style={{
+                            padding: '11px 18px',
+                            borderRadius: 14,
+                            border: 'none',
+                            background: exhausted ? T.borderCol : T.gradMain,
+                            color: exhausted ? T.subCol : '#fff',
+                            fontWeight: 900,
+                            cursor: exhausted ? 'not-allowed' : 'pointer',
+                            fontFamily: T.fontBody,
+                          }}
+                        >
+                          {q.has_active_attempt ? '▶️ أكمل المحاولة' : exhausted ? '✅ انتهت المحاولات' : '🚀 ابدأ الاختبار'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Card>
+
+            {/* المهام التقليدية (بلا تغيير) */}
+            <Card
+              title="مهامي"
+              sub="المهام التي تنتظر الإنجاز أو التسليم"
+              icon="📝"
+              accent={accentColor}
+            >
+              {assignments.length === 0 ? (
+                <Empty
+                  icon="🗂️"
+                  title="لا توجد مهام حالياً"
+                  sub="عندما يرسل المعلم مهاماً جديدة ستظهر هنا."
+                />
+              ) : (
+                <div style={{ display: 'grid', gap: 14 }}>
                   {assignments.map(a => (
                     <div
                       key={a.id}
@@ -1225,25 +1345,51 @@ export default function StudentPage() {
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: T.titleCol, marginBottom: 6 }}>{a.title}</div>
-                        <div style={{ fontSize: 13, color: T.subCol, marginBottom: 4 }}>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 900,
+                            color: T.titleCol,
+                            marginBottom: 6,
+                            fontFamily: T.fontHeading,
+                          }}
+                        >
+                          {a.title}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: T.subCol,
+                            marginBottom: 4,
+                            fontFamily: T.fontBody,
+                          }}
+                        >
                           الأداة: {a.tool} • الدرجة: {a.max_grade}
                         </div>
                         {a.deadline && (
-                          <div style={{ fontSize: 12, color: T.mutedCol }}>آخر موعد: {a.deadline}</div>
+                          <div style={{ fontSize: 14, color: T.mutedCol, fontFamily: T.fontBody }}>
+                            آخر موعد: {a.deadline}
+                          </div>
                         )}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
                         <span
                           style={{
-                            padding: '8px 12px',
+                            padding: '8px 14px',
                             borderRadius: 999,
                             background: a.submitted ? `${T.green}14` : `${accentColor}10`,
                             color: a.submitted ? T.green : accentColor,
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: 900,
                             border: `1px solid ${a.submitted ? T.green + '20' : accentColor + '20'}`,
+                            fontFamily: T.fontBody,
                           }}
                         >
                           {a.submitted ? 'تم التسليم' : 'بانتظارك'}
@@ -1256,13 +1402,13 @@ export default function StudentPage() {
                           }}
                           style={{
                             padding: '11px 15px',
-                            borderRadius: 12,
+                            borderRadius: 14,
                             border: 'none',
                             background: T.gradMain,
                             color: '#fff',
                             fontWeight: 900,
                             cursor: 'pointer',
-                            fontFamily: 'inherit',
+                            fontFamily: T.fontBody,
                           }}
                         >
                           فتح المهمة
@@ -1275,11 +1421,507 @@ export default function StudentPage() {
             </Card>
           </div>
         )}
+        {/* تبويب دروسي */}
+        {tab === 'lessons' && (
+          <div style={{ display: 'grid', gap: 18 }}>
+            {/* شريط المرحلة الثابت */}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 10,
+                padding: '14px 16px',
+                borderRadius: 16,
+                background: T.sectionBg,
+                border: `1px solid ${T.borderCol}`,
+              }}
+            >
+              <span style={{ fontSize: 13, color: T.subCol, fontWeight: 700, fontFamily: T.fontBody }}>
+                📍 صفّك المسجَّل:
+              </span>
 
+              {selectedStage ? (
+                <>
+                  <span
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 999,
+                      background: `${T.primary}10`,
+                      color: T.primary,
+                      fontWeight: 800,
+                      fontSize: 13,
+                      fontFamily: T.fontBody,
+                    }}
+                  >
+                    {STAGE_LABELS[selectedStage]}
+                  </span>
+                  {selectedGrade && (
+                    <span
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 999,
+                        background: `${T.primary}10`,
+                        color: T.primary,
+                        fontWeight: 800,
+                        fontSize: 13,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
+                      {GRADES_BY_STAGE[selectedStage].find(g => g.id === selectedGrade)?.label ?? `الصف ${selectedGrade}`}
+                    </span>
+                  )}
+                  {selectedTrack && (
+                    <span
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 999,
+                        background: `${T.primary}10`,
+                        color: T.primary,
+                        fontWeight: 800,
+                        fontSize: 13,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
+                      {TRACK_LABELS[selectedTrack]}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span style={{ fontSize: 14, color: T.mutedCol, fontFamily: T.fontBody }}>
+                  لم يُحدَّد صفّك بعد — تواصل مع إدارة المنصة لتفعيل هذا القسم.
+                </span>
+              )}
+            </div>
+
+            {/* مستوى ١: شبكة بطاقات المواد */}
+            {!selSubject ? (
+              subjects.length === 0 ? (
+                <Empty
+                  icon="📭"
+                  title="لا توجد مواد متاحة لك بعد"
+                  sub="تواصل مع إدارة المنصة لتفعيل اشتراكك في مادة أو باقة."
+                />
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 16 }}>
+                  {subjects.map(s => (
+                    <SubjectCardNew
+                      key={s.id}
+                      subject={{
+                        id: s.id,
+                        name: s.name,
+                        icon: s.icon,
+                        teacherName: s.teacherName ?? null,
+                        unitsCount: s.unitsCount ?? 0,
+                      }}
+                      accentColor={accentColor}
+                      onClick={() => {
+                        setSelSubject(s)
+                        setSelUnit(null)
+                        setSelLesson(null)
+                      }}
+                    />
+                  ))}
+                </div>
+              )
+            ) : !selUnit ? (
+              /* مستوى ٢: شبكة بطاقات الوحدات */
+              <div style={{ display: 'grid', gap: 14 }}>
+                <button
+                  onClick={() => setSelSubject(null)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    border: `1px solid ${T.borderCol}`,
+                    background: T.cardBg,
+                    color: T.textCol,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  ← رجوع للمواد
+                </button>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    fontFamily: T.fontHeading,
+                    color: T.titleCol,
+                  }}
+                >
+                  {selSubject.icon ? `${selSubject.icon} ` : ''}{selSubject.name}
+                </div>
+                {units.length === 0 ? (
+                  <Empty icon="📭" title="لا توجد وحدات منشورة بعد" sub="سيضيف معلمك الوحدات قريباً." />
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 14 }}>
+                    {units.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => {
+                          setSelUnit(u)
+                          setSelLesson(null)
+                        }}
+                        style={{
+                          textAlign: 'right',
+                          padding: 18,
+                          borderRadius: 18,
+                          border: `1px solid ${T.borderCol}`,
+                          background: T.cardBg,
+                          cursor: 'pointer',
+                          fontFamily: T.fontBody,
+                          boxShadow: T.shadowCard,
+                        }}
+                      >
+                        <div style={{ fontSize: 26, marginBottom: 8 }}>{u.icon || '📖'}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: T.titleCol, fontFamily: T.fontBody }}>
+                          {u.name}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : !selLesson ? (
+              /* مستوى ٣: قائمة دروس الوحدة */
+              <div style={{ display: 'grid', gap: 10 }}>
+                <button
+                  onClick={() => setSelUnit(null)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    border: `1px solid ${T.borderCol}`,
+                    background: T.cardBg,
+                    color: T.textCol,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  ← رجوع للوحدات
+                </button>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    fontFamily: T.fontHeading,
+                    color: T.titleCol,
+                    marginBottom: 4,
+                  }}
+                >
+                  {selUnit.icon ? `${selUnit.icon} ` : ''}{selUnit.name}
+                </div>
+                {lessons.length === 0 ? (
+                  <Empty icon="📭" title="لا توجد دروس منشورة بعد" sub="سيضيف معلمك الدروس قريباً." />
+                ) : (
+                  lessons.map(l => (
+                    <button
+                      key={l.id}
+                      onClick={() => setSelLesson(l)}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '14px 18px',
+                        borderRadius: 14,
+                        border: `1px solid ${T.borderCol}`,
+                        background: T.cardBg,
+                        cursor: 'pointer',
+                        fontFamily: T.fontBody,
+                        textAlign: 'right',
+                      }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 700, color: T.textCol, fontFamily: T.fontBody }}>
+                        {l.video_url || l.video_embed_url ? '🎬' : '📄'} {l.name}
+                      </span>
+                      <span style={{ color: T.subCol, fontSize: 13, fontFamily: T.fontBody }}>فتح ←</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : (
+              /* مستوى ٤: تفاصيل الدرس */
+              <div style={{ display: 'grid', gap: 14 }}>
+                <button
+                  onClick={() => setSelLesson(null)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    border: `1px solid ${T.borderCol}`,
+                    background: T.cardBg,
+                    color: T.textCol,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  ← رجوع للدروس
+                </button>
+
+                <Card title={selLesson.name} sub="محتوى الدرس" icon="📖">
+                  <MarkdownRenderer
+                    text={selLesson.content || 'لا توجد مادة علمية لهذا الدرس بعد.'}
+                  />
+                </Card>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  {(selLesson.video_url || selLesson.video_embed_url) && (
+                    <button
+                      onClick={() =>
+                        setOpenMedia({
+                          id: selLesson.id,
+                          title: selLesson.name,
+                          type: 'video',
+                          url: selLesson.video_url || '',
+                          embed_url: selLesson.video_embed_url || undefined,
+                          link_type: 'lesson',
+                        })
+                      }
+                      style={{
+                        padding: '14px 18px',
+                        borderRadius: 14,
+                        border: `1px solid ${T.borderCol}`,
+                        background: T.cardBg,
+                        color: T.textCol,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        fontFamily: T.fontBody,
+                      }}
+                    >
+                      🎬 فيديو الدرس
+                    </button>
+                  )}
+
+                  {selLesson.file_urls && selLesson.file_urls.length > 0 && (
+                    <a
+                      href={selLesson.file_urls[0]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '14px 18px',
+                        borderRadius: 14,
+                        border: `1px solid ${T.borderCol}`,
+                        background: T.cardBg,
+                        color: T.textCol,
+                        fontWeight: 800,
+                        fontFamily: T.fontBody,
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      📎 المرفقات ({selLesson.file_urls.length})
+                    </a>
+                  )}
+
+                  <button
+                    onClick={() => setTab('practice')}
+                    style={{
+                      padding: '14px 18px',
+                      borderRadius: 14,
+                      border: 'none',
+                      background: T.gradMain,
+                      color: '#fff',
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      fontFamily: T.fontBody,
+                    }}
+                  >
+                    ✨ تدرّب على هذا الدرس
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* تبويب التدريب */}
+        {tab === 'practice' && (
+          <div style={{ display: 'grid', gap: 18 }}>
+            <Card
+              title="التدرّب على الدرس"
+              sub="اختر الأداة التي تناسبك"
+              icon="✨"
+              accent={accentColor}
+            >
+              {!selLesson && (
+                <div
+                  style={{
+                    marginBottom: 18,
+                    padding: 14,
+                    borderRadius: 16,
+                    background: `${T.gold}14`,
+                    border: `1px solid ${T.gold}30`,
+                    color: T.subCol,
+                    fontSize: 14,
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  اختر درسًا أولاً من تبويب "دروسي" لتفعيل أدوات التدريب.
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4,minmax(0,1fr))',
+                  gap: 14,
+                }}
+              >
+                {PRACTICE_TOOLS.map(tool => {
+                  const active = practiceTool === tool.id
+                  return (
+                    <button
+                      key={tool.id}
+                      onClick={() => setPracticeTool(tool.id)}
+                      style={{
+                        textAlign: 'right',
+                        padding: 16,
+                        borderRadius: 18,
+                        border: `1px solid ${active ? accentColor + '33' : T.borderCol}`,
+                        background: active ? `${accentColor}0F` : T.cardBg,
+                        boxShadow: active ? `0 10px 24px ${accentColor}14` : 'none',
+                        cursor: 'pointer',
+                        fontFamily: T.fontBody,
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <div style={{ fontSize: 22, marginBottom: 10 }}>{tool.icon}</div>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 900,
+                          color: T.titleCol,
+                          marginBottom: 4,
+                          fontFamily: T.fontBody,
+                        }}
+                      >
+                        {tool.label}
+                      </div>
+                      <div style={{ fontSize: 14, color: T.subCol, fontFamily: T.fontBody }}>
+                        {tool.desc}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  marginTop: 18,
+                }}
+              >
+                <button
+                  onClick={handlePractice}
+                  disabled={
+                    !selLesson ||
+                    !practiceTool ||
+                    practiceLoading ||
+                    quizLoading ||
+                    flashLoading
+                  }
+                  style={{
+                    padding: '13px 22px',
+                    borderRadius: 14,
+                    border: 'none',
+                    background: !selLesson || !practiceTool ? T.borderCol : T.gradMain,
+                    color: !selLesson || !practiceTool ? T.subCol : '#fff',
+                    fontWeight: 900,
+                    cursor: !selLesson || !practiceTool ? 'not-allowed' : 'pointer',
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  {practiceLoading || quizLoading || flashLoading
+                    ? '⏳ جارٍ التحضير...'
+                    : 'ابدأ التمرين'}
+                </button>
+              </div>
+            </Card>
+
+            {practiceError && (
+              <div
+                style={{
+                  background: '#FFF4F1',
+                  border: `1px solid ${T.primaryDeep}22`,
+                  color: T.primaryDeep,
+                  padding: 14,
+                  borderRadius: 16,
+                  fontSize: 14,
+                  fontFamily: T.fontBody,
+                }}
+              >
+                {practiceError}
+              </div>
+            )}
+
+            {quizError && (
+              <div
+                style={{
+                  background: '#FFF4F1',
+                  border: `1px solid ${T.primaryDeep}22`,
+                  color: T.primaryDeep,
+                  padding: 14,
+                  borderRadius: 16,
+                  fontSize: 14,
+                  fontFamily: T.fontBody,
+                }}
+              >
+                {quizError}
+              </div>
+            )}
+
+            {flashError && (
+              <div
+                style={{
+                  background: '#FFF4F1',
+                  border: `1px solid ${T.primaryDeep}22`,
+                  color: T.primaryDeep,
+                  padding: 14,
+                  borderRadius: 16,
+                  fontSize: 14,
+                  fontFamily: T.fontBody,
+                }}
+              >
+                {flashError}
+              </div>
+            )}
+
+            {practiceOutput && (
+              <Card
+                title="نتيجة التدريب"
+                sub="محتوى مولّد لك حسب الدرس"
+                icon="🧾"
+              >
+                <MarkdownRenderer text={practiceOutput} />
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* تبويب الرسائل */}
         {tab === 'messages' && (
-          <Card title="رسائل المعلم" sub="ابقَ على تواصل عند الحاجة" icon="💬" accent={accentColor}>
+          <Card
+            title="رسائل المعلم"
+            sub="ابقَ على تواصل عند الحاجة"
+            icon="💬"
+            accent={accentColor}
+          >
             {!teacherId ? (
-              <Empty icon="📭" title="لا توجد محادثة حالياً" sub="عند ربط معلمك بك ستظهر المحادثات هنا." />
+              <Empty
+                icon="📭"
+                title="لا توجد محادثة حالياً"
+                sub="عند ربط معلمك بك ستظهر المحادثات هنا."
+              />
             ) : (
               <div
                 style={{
@@ -1289,9 +1931,25 @@ export default function StudentPage() {
                   background: T.sectionBg,
                 }}
               >
-                <div style={{ maxHeight: 420, overflowY: 'auto', padding: 14, display: 'grid', gap: 10 }}>
+                <div
+                  style={{
+                    maxHeight: 420,
+                    overflowY: 'auto',
+                    padding: 14,
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
                   {messages.length === 0 && (
-                    <div style={{ color: T.subCol, fontSize: 14, textAlign: 'center', padding: 20 }}>
+                    <div
+                      style={{
+                        color: T.subCol,
+                        fontSize: 14,
+                        textAlign: 'center',
+                        padding: 20,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
                       لا توجد رسائل بعد.
                     </div>
                   )}
@@ -1311,7 +1969,7 @@ export default function StudentPage() {
                             maxWidth: '75%',
                             padding: '10px 14px',
                             borderRadius: isMe ? '14px 14px 14px 4px' : '14px 14px 4px 14px',
-                            background: isMe ? `${accentColor}12` : T.cardBg,
+                            background: isMe ? `${accentColor}14` : T.cardBg,
                             border: `1px solid ${isMe ? accentColor + '24' : T.borderCol}`,
                           }}
                         >
@@ -1319,16 +1977,31 @@ export default function StudentPage() {
                             <img
                               src={msg.image_url}
                               alt="صورة"
-                              style={{ maxWidth: '100%', borderRadius: 10, marginBottom: 8 }}
+                              style={{
+                                maxWidth: '100%',
+                                borderRadius: 10,
+                                marginBottom: 8,
+                              }}
                             />
                           )}
-                          <p style={{ fontSize: 14, color: T.textCol, margin: 0, lineHeight: 1.8 }}>{msg.content}</p>
+                          <p
+                            style={{
+                              fontSize: 14,
+                              color: T.textCol,
+                              margin: 0,
+                              lineHeight: 1.8,
+                              fontFamily: T.fontBody,
+                            }}
+                          >
+                            {msg.content}
+                          </p>
                           <p
                             style={{
                               fontSize: 10,
                               color: T.subCol,
                               margin: '4px 0 0',
                               textAlign: isMe ? 'right' : 'left',
+                              fontFamily: T.fontBody,
                             }}
                           >
                             {new Date(msg.created_at).toLocaleTimeString('ar-KW', {
@@ -1358,13 +2031,13 @@ export default function StudentPage() {
                     placeholder="اكتب رسالة لمعلمك..."
                     style={{
                       flex: 1,
-                      padding: '12px 14px',
-                      borderRadius: 12,
+                      padding: '14px 14px',
+                      borderRadius: 14,
                       border: `1px solid ${T.inputBorder}`,
                       background: T.inputBg,
                       color: T.textCol,
                       fontSize: 14,
-                      fontFamily: 'inherit',
+                      fontFamily: T.fontBody,
                       outline: 'none',
                     }}
                   />
@@ -1372,14 +2045,14 @@ export default function StudentPage() {
                     onClick={handleSendMessage}
                     disabled={sendingMsg || !newMsg.trim()}
                     style={{
-                      padding: '12px 18px',
-                      borderRadius: 12,
+                      padding: '14px 18px',
+                      borderRadius: 14,
                       border: 'none',
                       background: newMsg.trim() ? T.gradBlue : T.borderCol,
                       color: newMsg.trim() ? '#fff' : T.subCol,
                       fontWeight: 900,
                       cursor: newMsg.trim() ? 'pointer' : 'not-allowed',
-                      fontFamily: 'inherit',
+                      fontFamily: T.fontBody,
                     }}
                   >
                     {sendingMsg ? '⏳' : 'إرسال'}
@@ -1390,12 +2063,28 @@ export default function StudentPage() {
           </Card>
         )}
 
+        {/* تبويب الوسائط */}
         {tab === 'media' && (
-          <Card title="وسائط المعلم" sub="فيديوهات أو تسجيلات تساعدك على الفهم" icon="🎥" accent={accentColor}>
+          <Card
+            title="وسائط المعلم"
+            sub="فيديوهات أو تسجيلات تساعدك على الفهم"
+            icon="🎥"
+            accent={accentColor}
+          >
             {media.length === 0 ? (
-              <Empty icon="🎬" title="لا توجد وسائط" sub="سيضيف معلمك الفيديوهات أو التسجيلات هنا." />
+              <Empty
+                icon="🎬"
+                title="لا توجد وسائط"
+                sub="سيضيف معلمك الفيديوهات أو التسجيلات هنا."
+              />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 14 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))',
+                  gap: 14,
+                }}
+              >
                 {media.map(m => (
                   <button
                     key={m.id}
@@ -1407,14 +2096,14 @@ export default function StudentPage() {
                       background: T.cardBg,
                       cursor: 'pointer',
                       textAlign: 'right',
-                      fontFamily: 'inherit',
+                      fontFamily: T.fontBody,
                       padding: 0,
                       boxShadow: T.shadowCard,
                     }}
                   >
                     <div
                       style={{
-                        height: 120,
+                        height: 140,
                         background: `${accentColor}10`,
                         display: 'flex',
                         alignItems: 'center',
@@ -1426,7 +2115,11 @@ export default function StudentPage() {
                         <img
                           src={m.thumbnail}
                           alt={m.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
                         />
                       ) : m.type === 'video' ? (
                         '🎬'
@@ -1434,9 +2127,21 @@ export default function StudentPage() {
                         '🎵'
                       )}
                     </div>
-                    <div style={{ padding: '12px 14px' }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: T.textCol, marginBottom: 4 }}>{m.title}</div>
-                      <div style={{ fontSize: 12, color: T.subCol }}>{m.type === 'video' ? 'فيديو' : 'صوت'}</div>
+                    <div style={{ padding: '14px 14px' }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: T.textCol,
+                          marginBottom: 4,
+                          fontFamily: T.fontBody,
+                        }}
+                      >
+                        {m.title}
+                      </div>
+                      <div style={{ fontSize: 14, color: T.subCol, fontFamily: T.fontBody }}>
+                        {m.type === 'video' ? 'فيديو' : 'صوت'}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -1446,6 +2151,7 @@ export default function StudentPage() {
         )}
       </main>
 
+      {/* شريط التبويبات السفلي */}
       <nav
         style={{
           position: 'fixed',
@@ -1458,64 +2164,133 @@ export default function StudentPage() {
           borderTop: `1px solid ${T.borderCol}`,
           display: 'flex',
           justifyContent: 'space-around',
-          padding: '8px 0 14px',
+          alignItems: 'center',
+          padding: '2px 0 12px',
           boxShadow: '0 -2px 12px rgba(73,44,24,0.08)',
         }}
       >
-        {TABS.map(tb => (
-          <button
-            key={tb.id}
-            onClick={() => setTab(tb.id)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 4,
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              padding: '5px 10px',
-              borderRadius: 12,
-              color: tab === tb.id ? accentColor : T.subCol,
-              position: 'relative',
-            }}
-          >
-            <span style={{ fontSize: 19 }}>{tb.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: tab === tb.id ? 900 : 700 }}>{tb.label}</span>
-            {'badge' in tb && (tb as { badge: number }).badge > 0 && (
+        {TABS.map(tb => {
+          const isActive = tab === tb.id
+          const activeColor = FIXED_NAV_ACTIVE_COLOR
+
+          return (
+            <button
+              key={tb.id}
+              onClick={() => setTab(tb.id)}
+              aria-label={tb.label}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                background: isActive ? '#FFFFFF' : 'transparent',
+                border: isActive ? `2px solid ${activeColor}` : '2px solid transparent',
+                borderRadius: 12,
+                padding: '4px 8px',
+                margin: '0 2px',
+                cursor: 'pointer',
+                fontFamily: T.fontBody,
+                color: isActive ? activeColor : T.subCol,
+                position: 'relative',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: isActive ? '0 6px 18px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)' : 'none',
+                transform: isActive ? 'translateY(-4px)' : 'translateY(0)',
+                minWidth: 48,
+                minHeight: 40,
+              }}
+            >
+              {isActive && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -2,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 18,
+                    height: 3,
+                    borderRadius: 3,
+                    background: activeColor,
+                  }}
+                />
+              )}
+
               <span
                 style={{
-                  position: 'absolute',
-                  top: 0,
-                  right: 0,
-                  background: T.primaryDeep,
-                  color: '#fff',
-                  minWidth: 18,
-                  height: 18,
-                  padding: '0 4px',
-                  borderRadius: 999,
-                  fontSize: 10,
-                  fontWeight: 900,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  fontSize: isActive ? 18 : 16,
+                  filter: isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' : 'none',
+                  transition: 'all 0.3s ease',
                 }}
               >
-                {(tb as { badge: number }).badge}
+                {tb.icon}
               </span>
-            )}
-          </button>
-        ))}
+
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: isActive ? 900 : 700,
+                  transition: 'all 0.3s ease',
+                  textShadow: isActive ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                {tb.label}
+              </span>
+
+              {'badge' in tb && (tb as { badge: number }).badge > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 1,
+                    right: 1,
+                    background: T.primaryDeep,
+                    color: '#fff',
+                    minWidth: 14,
+                    height: 14,
+                    padding: '0 3px',
+                    borderRadius: 999,
+                    fontSize: 8,
+                    fontWeight: 900,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `2px solid ${isActive ? '#FFFFFF' : T.headerBg}`,
+                  }}
+                >
+                  {(tb as { badge: number }).badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </nav>
 
+      {/* مودال الاختبار (نمط /api/quiz القديم — لا تغيير) */}
       {showQuiz && quizData && (
         <div style={overlayStyle}>
           <div style={modalStyle(accentColor)}>
             <div style={modalHeader(accentColor)}>
               <div>
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: accentColor, margin: 0 }}>🎯 {quizData.title}</h3>
-                <p style={{ fontSize: 12, color: T.subCol, margin: '4px 0 0' }}>{quizData.questions.length} أسئلة</p>
+                <h3
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 900,
+                    color: accentColor,
+                    margin: 0,
+                    fontFamily: T.fontHeading,
+                  }}
+                >
+                  🎯 {quizData.title}
+                </h3>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: T.subCol,
+                    margin: '4px 0 0',
+                    fontFamily: T.fontBody,
+                  }}
+                >
+                  {quizData.questions.length} أسئلة
+                </p>
               </div>
               <button onClick={() => setShowQuiz(false)} style={closeStyle()}>
                 ✕
@@ -1538,13 +2313,31 @@ export default function StudentPage() {
         </div>
       )}
 
+      {/* مودال البطاقات */}
       {showFlash && flashData && (
         <div style={overlayStyle}>
           <div style={modalStyle(accentColor)}>
             <div style={modalHeader(accentColor)}>
               <div>
-                <h3 style={{ fontSize: 15, fontWeight: 900, color: accentColor, margin: 0 }}>🃏 {flashData.title}</h3>
-                <p style={{ fontSize: 12, color: T.subCol, margin: '4px 0 0' }}>
+                <h3
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 900,
+                    color: accentColor,
+                    margin: 0,
+                    fontFamily: T.fontHeading,
+                  }}
+                >
+                  🃏 {flashData.title}
+                </h3>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: T.subCol,
+                    margin: '4px 0 0',
+                    fontFamily: T.fontBody,
+                  }}
+                >
                   {flashData.cards.length} بطاقة • {flashData.lessonType}
                 </p>
               </div>
@@ -1568,6 +2361,7 @@ export default function StudentPage() {
         </div>
       )}
 
+      {/* مودال الإعدادات */}
       {showSettings && (
         <div
           style={overlayStyle}
@@ -1579,26 +2373,61 @@ export default function StudentPage() {
             style={{
               width: '92%',
               maxWidth: 360,
-              borderRadius: 24,
-              padding: 24,
+              borderRadius: 20,
+              padding: 20,
               background: T.cardBg,
               border: `1px solid ${T.borderCol}`,
               boxShadow: '0 20px 50px rgba(0,0,0,0.14)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: T.titleCol, margin: 0 }}>⚙️ إعداداتي</h2>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 18,
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: T.titleCol,
+                  margin: 0,
+                  fontFamily: T.fontHeading,
+                }}
+              >
+                ⚙️ إعداداتي
+              </h2>
               <button onClick={() => setShowSettings(false)} style={closeStyle()}>
                 ✕
               </button>
             </div>
 
-            <p style={{ fontSize: 14, fontWeight: 800, color: T.titleCol, marginBottom: 12 }}>🎨 لون التمييز</p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 22 }}>
+            <p
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: T.titleCol,
+                marginBottom: 14,
+                fontFamily: T.fontBody,
+              }}
+            >
+              🎨 لون التمييز
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                marginBottom: 22,
+              }}
+            >
               {ACCENT_COLORS.map(col => (
                 <button
                   key={col}
                   onClick={() => setAccentColor(col)}
+                  aria-label={`اختر اللون`}
                   style={{
                     width: 42,
                     height: 42,
@@ -1606,7 +2435,11 @@ export default function StudentPage() {
                     background: col,
                     border: 'none',
                     cursor: 'pointer',
-                    boxShadow: accentColor === col ? `0 0 0 3px ${T.bg},0 0 0 5px ${col}` : 'none',
+                    boxShadow:
+                      accentColor === col
+                        ? `0 0 0 3px ${T.bg},0 0 0 5px ${col}`
+                        : 'none',
+                    transition: 'all 0.2s ease',
                   }}
                 />
               ))}
@@ -1625,7 +2458,7 @@ export default function StudentPage() {
                 fontWeight: 900,
                 fontSize: 15,
                 cursor: 'pointer',
-                fontFamily: 'inherit',
+                fontFamily: T.fontBody,
                 boxShadow: T.blueGlow,
                 opacity: savingSet ? 0.7 : 1,
               }}
@@ -1636,6 +2469,7 @@ export default function StudentPage() {
         </div>
       )}
 
+      {/* مودال المهمة */}
       {openAssign && (
         <div
           style={overlayStyle}
@@ -1645,13 +2479,30 @@ export default function StudentPage() {
         >
           <div style={modalStyle(accentColor, 720)}>
             <div style={modalHeader(accentColor)}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: T.titleCol, margin: 0 }}>{openAssign.title}</h3>
+              <h3
+                style={{
+                  fontSize: 16,
+                  fontWeight: 900,
+                  color: T.titleCol,
+                  margin: 0,
+                  fontFamily: T.fontHeading,
+                }}
+              >
+                {openAssign.title}
+              </h3>
               <button onClick={() => setOpenAssign(null)} style={closeStyle()}>
                 ✕
               </button>
             </div>
 
-            <div style={{ overflowY: 'auto', padding: 18, display: 'grid', gap: 16 }}>
+            <div
+              style={{
+                overflowY: 'auto',
+                padding: 18,
+                display: 'grid',
+                gap: 16,
+              }}
+            >
               <div
                 style={{
                   background: T.sectionBg,
@@ -1660,18 +2511,19 @@ export default function StudentPage() {
                   padding: 16,
                 }}
               >
-                <MarkdownRenderer content={openAssign.content} />
+                <MarkdownRenderer text={openAssign.content} />
               </div>
 
               {submitDone ? (
                 <div
                   style={{
-                    background: `${T.green}12`,
+                    background: `${T.green}14`,
                     border: `1px solid ${T.green}30`,
                     color: T.green,
                     padding: 14,
                     borderRadius: 16,
                     fontWeight: 800,
+                    fontFamily: T.fontBody,
                   }}
                 >
                   ✅ تم تسليم المهمة بنجاح.
@@ -1693,7 +2545,7 @@ export default function StudentPage() {
                       color: T.textCol,
                       fontSize: 14,
                       lineHeight: 1.8,
-                      fontFamily: 'inherit',
+                      fontFamily: T.fontBody,
                       outline: 'none',
                     }}
                   />
@@ -1708,7 +2560,7 @@ export default function StudentPage() {
                       color: !answerText.trim() ? T.subCol : '#fff',
                       fontWeight: 900,
                       cursor: !answerText.trim() ? 'not-allowed' : 'pointer',
-                      fontFamily: 'inherit',
+                      fontFamily: T.fontBody,
                     }}
                   >
                     {submitting ? '⏳ جارٍ التسليم...' : 'إرسال المهمة'}
@@ -1720,6 +2572,7 @@ export default function StudentPage() {
         </div>
       )}
 
+      {/* مودال الوسائط */}
       {openMedia && (
         <div
           style={overlayStyle}
@@ -1729,7 +2582,17 @@ export default function StudentPage() {
         >
           <div style={modalStyle(accentColor, 840)}>
             <div style={modalHeader(accentColor)}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: T.titleCol, margin: 0 }}>{openMedia.title}</h3>
+              <h3
+                style={{
+                  fontSize: 16,
+                  fontWeight: 900,
+                  color: T.titleCol,
+                  margin: 0,
+                  fontFamily: T.fontHeading,
+                }}
+              >
+                {openMedia.title}
+              </h3>
               <button onClick={() => setOpenMedia(null)} style={closeStyle()}>
                 ✕
               </button>
@@ -1741,7 +2604,12 @@ export default function StudentPage() {
                   <iframe
                     src={openMedia.embed_url}
                     title={openMedia.title}
-                    style={{ width: '100%', height: 420, border: 'none', borderRadius: 18 }}
+                    style={{
+                      width: '100%',
+                      height: 420,
+                      border: 'none',
+                      borderRadius: 18,
+                    }}
                     allowFullScreen
                   />
                 ) : (
@@ -1762,20 +2630,7 @@ export default function StudentPage() {
   )
 }
 
-function selectStyle(): React.CSSProperties {
-  return {
-    padding: '13px 14px',
-    borderRadius: 14,
-    border: `1px solid ${T.inputBorder}`,
-    background: T.inputBg,
-    color: T.textCol,
-    fontSize: 14,
-    fontFamily: 'inherit',
-    outline: 'none',
-  }
-}
-
-const overlayStyle: React.CSSProperties = {
+const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
   zIndex: 100,
@@ -1787,7 +2642,7 @@ const overlayStyle: React.CSSProperties = {
   padding: 16,
 }
 
-function modalStyle(accentColor: string, maxWidth = 680): React.CSSProperties {
+function modalStyle(accentColor: string, maxWidth = 680): CSSProperties {
   return {
     width: '100%',
     maxWidth,
@@ -1802,7 +2657,7 @@ function modalStyle(accentColor: string, maxWidth = 680): React.CSSProperties {
   }
 }
 
-function modalHeader(accentColor: string): React.CSSProperties {
+function modalHeader(accentColor: string): CSSProperties {
   return {
     padding: '14px 18px',
     borderBottom: `1px solid ${T.borderCol}`,
@@ -1813,7 +2668,7 @@ function modalHeader(accentColor: string): React.CSSProperties {
   }
 }
 
-function closeStyle(): React.CSSProperties {
+function closeStyle(): CSSProperties {
   return {
     background: 'none',
     border: 'none',

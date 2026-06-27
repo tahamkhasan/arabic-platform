@@ -1,6 +1,12 @@
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!
 const ANTHROPIC_URL     = 'https://api.anthropic.com/v1/messages'
 
+// ── جديد: مهلة قصوى صريحة للاتصال — بلا هذا، طلبات التوليد الثقيلة
+// (مثل توليد 8-12 سؤال اختبار دفعة واحدة) قد تتجاوز مهلة افتراضية
+// ضمنية لم تكن محدَّدة بوضوح، فيُقطَع الاتصال قبل اكتمال رد Claude.
+// 90 ثانية كافية لأثقل طلبات التوليد الحالية في المنصة. ──────────
+const GENERATION_TIMEOUT_MS = 90_000
+
 // ══════════════════════════════════════════════════════
 // الهوية الثابتة للنموذج
 // ══════════════════════════════════════════════════════
@@ -137,29 +143,45 @@ export function buildSystemPrompt(
 
 // ══════════════════════════════════════════════════════
 // الاستدعاء الفعلي لـ Claude
+// ── مُعدَّل: إضافة AbortController بمهلة صريحة 90 ثانية، بدل
+// الاعتماد على مهلة ضمنية غير محدَّدة بوضوح كانت تقطع الطلبات
+// الثقيلة (مثل توليد 8-12 سؤال اختبار دفعة واحدة) قبل اكتمالها. ──
 // ══════════════════════════════════════════════════════
 export async function generateWithGemini(
   systemPrompt: string,
   userPrompt:   string
 ): Promise<string> {
-  const response = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-api-key':         ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-5',
-      max_tokens: 4000,
-      system:     systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS)
 
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error?.message || 'Claude API error')
-  return data.content?.[0]?.text || 'لم تُسترجع نتيجة.'
+  try {
+    const response = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-api-key':         ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-5',
+        max_tokens: 4000,
+        system:     systemPrompt,
+        messages: [
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal: controller.signal,
+    })
+
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error?.message || 'Claude API error')
+    return data.content?.[0]?.text || 'لم تُسترجع نتيجة.'
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`انتهت مهلة الاتصال بالذكاء الاصطناعي (${GENERATION_TIMEOUT_MS / 1000} ثانية) — حاول بطلب أصغر أو أعد المحاولة.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }

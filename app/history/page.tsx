@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ar } from '@/lib/constants/ar'
+import { BRAND } from '@/lib/constants/theme'
 import PrintButton      from '@/components/PrintButton'
 import SpeechButton     from '@/components/SpeechButton'
 import WordExportButton from '@/components/WordExportButton'
@@ -29,12 +30,12 @@ interface HistoryItem {
 
 // ── ثوابت الأدوات ─────────────────────────────────────────────────
 const TOOL_META: Record<string, { label: string; icon: string; color: string }> = {
-  explain:   { label: 'شرح الدرس',      icon: '💡', color: '#f9d423' },
-  worksheet: { label: 'ورقة عمل',        icon: '📋', color: '#4facfe' },
-  game:      { label: 'لعبة لغوية',      icon: '🎮', color: '#43e97b' },
-  plan:      { label: 'تحضير الدرس',     icon: '📖', color: '#a78bfa' },
-  pptx:      { label: 'PowerPoint',      icon: '📊', color: '#f97316' },
-  exam:      { label: 'اختبار',           icon: '📝', color: '#ec4899' },
+  explain:   { label: 'شرح الدرس',      icon: '💡', color: BRAND.gold },
+  worksheet: { label: 'ورقة عمل',        icon: '📋', color: BRAND.red },
+  game:      { label: 'لعبة لغوية',      icon: '🎮', color: BRAND.orangeRed },
+  plan:      { label: 'تحضير الدرس',     icon: '📖', color: BRAND.deep },
+  pptx:      { label: 'PowerPoint',      icon: '📊', color: BRAND.orange },
+  exam:      { label: 'اختبار',           icon: '📝', color: BRAND.crimson },
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -63,8 +64,8 @@ export default function HistoryPage() {
 
   // ── المستخدم ──────────────────────────────────────────────────
   const [user,       setUser]       = useState<User | null>(null)
-  const [themeColor, setThemeColor] = useState('#f9d423')
-  const [isDark,     setIsDark]     = useState(true)
+  const [themeColor, setThemeColor] = useState<string>(BRAND.red)
+  const [isDark,     setIsDark]     = useState(false)
 
   // ── السجل ─────────────────────────────────────────────────────
   const [items,      setItems]      = useState<HistoryItem[]>([])
@@ -94,7 +95,7 @@ export default function HistoryPage() {
       const u = JSON.parse(saved) as User
       setUser(u)
       if (u.theme_color) setThemeColor(u.theme_color)
-      const mode = u.theme_mode ?? 'dark'
+      const mode = u.theme_mode ?? 'light'
       setIsDark(
         mode === 'dark' ||
         (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -179,12 +180,12 @@ export default function HistoryPage() {
   }
 
   // ── ألوان الثيم ───────────────────────────────────────────────
-  const bg        = isDark ? '#0f0c29'                 : '#f0f4ff'
-  const cardBg    = isDark ? 'rgba(255,255,255,0.06)'  : '#ffffff'
-  const textCol   = isDark ? '#e2e8f0'                 : '#1a202c'
-  const subCol    = isDark ? '#718096'                  : '#4a5568'
-  const borderCol = isDark ? 'rgba(255,255,255,0.1)'   : 'rgba(0,0,0,0.1)'
-  const inputBg   = isDark ? 'rgba(255,255,255,0.08)'  : 'rgba(0,0,0,0.04)'
+  const bg        = isDark ? '#1A1612'                : BRAND.bg
+  const cardBg    = isDark ? '#241F1A'                : BRAND.bgSoft
+  const textCol   = isDark ? '#F5EFE6'                : BRAND.text
+  const subCol    = isDark ? '#B5A99C'                : BRAND.sub
+  const borderCol = isDark ? 'rgba(220,100,40,0.18)'  : BRAND.border
+  const inputBg   = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(140,20,40,0.04)'
 
   if (!user) return null
 
@@ -194,7 +195,7 @@ export default function HistoryPage() {
       {/* ══ الرأس ══════════════════════════════════════════════ */}
       <header style={{
         position: 'sticky', top: 0, zIndex: 50,
-        background: isDark ? 'rgba(15,12,41,0.95)' : 'rgba(240,244,255,0.95)',
+        background: isDark ? 'rgba(26,22,18,0.95)' : 'rgba(247,242,234,0.95)',
         backdropFilter: 'blur(20px)',
         borderBottom: `1px solid ${borderCol}`,
         padding: '12px 20px',
@@ -203,10 +204,24 @@ export default function HistoryPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => router.push('/dashboard')}
-            style={{ background: 'none', border: 'none', color: subCol, cursor: 'pointer', fontSize: 20, padding: 0 }}
-            title="العودة للداشبورد"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 16px',
+              borderRadius: 12,
+              border: 'none',
+              background: themeColor,
+              color: '#1a1a2e',
+              fontWeight: 900,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: `0 4px 14px ${themeColor}40`,
+              flexShrink: 0,
+            }}
           >
-            ←
+            → رجوع
           </button>
           <span style={{ fontSize: 20 }}>📚</span>
           <div>
@@ -277,9 +292,9 @@ export default function HistoryPage() {
           onClick={() => setFilterFavorite(f => !f)}
           style={{
             padding: '6px 14px', borderRadius: 8, border: `1px solid`,
-            borderColor: filterFavorite ? '#f6c90e' : borderCol,
-            background:  filterFavorite ? 'rgba(246,201,14,0.15)' : 'transparent',
-            color:       filterFavorite ? '#f6c90e' : subCol,
+            borderColor: filterFavorite ? BRAND.gold : borderCol,
+            background:  filterFavorite ? 'rgba(220,140,60,0.15)' : 'transparent',
+            color:       filterFavorite ? BRAND.gold : subCol,
             cursor: 'pointer', fontSize: 12, fontWeight: 700,
             fontFamily: 'inherit', transition: 'all 0.15s',
           }}
@@ -308,7 +323,7 @@ export default function HistoryPage() {
             background: cardBg, borderRadius: 20, border: `1px solid ${borderCol}`,
           }}>
             <div style={{ fontSize: 64, marginBottom: 16 }}>📭</div>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: textCol, marginBottom: 8 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: textCol, marginBottom: 8, fontFamily: BRAND.fontHeading }}>
               {searchText || filterFavorite || filterTool !== 'all'
                 ? 'لا توجد نتائج للفلتر الحالي'
                 : 'سجلك فارغ حتى الآن'}
@@ -322,7 +337,7 @@ export default function HistoryPage() {
               onClick={() => router.push('/dashboard')}
               style={{
                 padding: '10px 24px', borderRadius: 12, border: 'none',
-                background: `linear-gradient(135deg,${themeColor},#ff4e50)`,
+                background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`,
                 color: '#1a1a2e', fontWeight: 800, fontSize: 13,
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
@@ -349,10 +364,10 @@ export default function HistoryPage() {
                   key={item.id}
                   style={{
                     background: cardBg, borderRadius: 16, padding: 16,
-                    border: `1px solid ${item.is_favorite ? '#f6c90e55' : borderCol}`,
+                    border: `1px solid ${item.is_favorite ? BRAND.gold + '55' : borderCol}`,
                     cursor: 'pointer', transition: 'all 0.2s',
                     position: 'relative',
-                    boxShadow: item.is_favorite ? `0 0 0 1px #f6c90e33` : 'none',
+                    boxShadow: item.is_favorite ? `0 0 0 1px ${BRAND.gold}33` : 'none',
                   }}
                   onClick={() => setOpenItem(item)}
                   onMouseEnter={e => {
@@ -361,7 +376,7 @@ export default function HistoryPage() {
                   }}
                   onMouseLeave={e => {
                     (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
-                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = item.is_favorite ? `0 0 0 1px #f6c90e33` : 'none'
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = item.is_favorite ? `0 0 0 1px ${BRAND.gold}33` : 'none'
                   }}
                 >
                   {/* رأس البطاقة */}
@@ -422,7 +437,7 @@ export default function HistoryPage() {
                     </div>
                   ) : (
                     <h3
-                      style={{ fontSize: 13, fontWeight: 700, color: textCol, marginBottom: 8, lineHeight: 1.5 }}
+                      style={{ fontSize: 13, fontWeight: 700, color: textCol, marginBottom: 8, lineHeight: 1.5, fontFamily: BRAND.fontHeading }}
                       title="انقر مرتين لتغيير العنوان"
                       onDoubleClick={e => {
                         e.stopPropagation()
@@ -464,7 +479,7 @@ export default function HistoryPage() {
                         <span onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 4 }}>
                           <button
                             onClick={() => deleteItem(item.id)}
-                            style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: '#fc8181', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                            style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: BRAND.crimson, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
                           >تأكيد</button>
                           <button
                             onClick={() => setConfirmDel(null)}
@@ -475,7 +490,7 @@ export default function HistoryPage() {
                         <button
                           onClick={e => { e.stopPropagation(); setConfirmDel(item.id) }}
                           disabled={deletingId === item.id}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fc8181', fontSize: 13, padding: '2px 4px', opacity: deletingId === item.id ? 0.5 : 1 }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND.crimson, fontSize: 13, padding: '2px 4px', opacity: deletingId === item.id ? 0.5 : 1 }}
                           title="حذف"
                         >🗑️</button>
                       )}
@@ -542,7 +557,7 @@ export default function HistoryPage() {
         >
           <div style={{
             width: '100%', maxWidth: 760, maxHeight: '90vh',
-            background: isDark ? '#1a1a2e' : '#ffffff',
+            background: isDark ? '#241F1A' : '#ffffff',
             borderRadius: 20, display: 'flex', flexDirection: 'column',
             border: `1px solid ${borderCol}`, overflow: 'hidden',
           }}>
@@ -642,9 +657,9 @@ function CopyButton({ text, themeColor }: { text: string; themeColor: string }) 
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '6px 12px', borderRadius: 8,
-        border: `1px solid ${copied ? '#68d391' : themeColor + '44'}`,
-        background: copied ? 'rgba(72,187,120,0.15)' : themeColor + '15',
-        color: copied ? '#68d391' : themeColor,
+        border: `1px solid ${copied ? BRAND.gold : themeColor + '44'}`,
+        background: copied ? 'rgba(220,140,60,0.15)' : themeColor + '15',
+        color: copied ? BRAND.gold : themeColor,
         cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
       }}
     >
