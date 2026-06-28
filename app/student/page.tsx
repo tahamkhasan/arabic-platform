@@ -115,7 +115,6 @@ interface Assignment {
   grade?: number | null
 }
 
-// ── جديد: الاختبارات التفاعلية المتاحة لفصل الطالب ──────────────
 interface QuizAvailable {
   id: string
   title: string
@@ -184,14 +183,7 @@ const PRACTICE_TOOLS = [
   { id: 'flashcards', icon: '🃏', label: 'بطاقات الحفظ', desc: 'راجع بسرعة وذكاء' },
 ] as const
 
-const ACCENT_COLORS = [
-  BRAND.deep,
-  BRAND.red,
-  BRAND.crimson,
-  BRAND.orangeRed,
-  BRAND.orange,
-  BRAND.gold,
-]
+// ── مُزال: ACCENT_COLORS (اختيار لون شخصي) — أُلغيت الميزة بالكامل ──
 
 const Empty = memo(({ icon, title, sub }: { icon: string; title: string; sub: string }) => {
   return (
@@ -372,9 +364,8 @@ export default function StudentPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<User | null>(null)
-  const [accentColor, setAccentColor] = useState<string>(T.primaryDeep)
-  const [showSettings, setShowSettings] = useState(false)
-  const [savingSet, setSavingSet] = useState(false)
+  // ── مُعدَّل: accentColor ثابت (BRAND.deep) — لا اختيار شخصي بعد الآن ──
+  const accentColor = BRAND.deep
   const [tab, setTab] = useState<Tab>('home')
 
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -405,7 +396,6 @@ export default function StudentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitDone, setSubmitDone] = useState(false)
 
-  // ── جديد: الاختبارات التفاعلية المتاحة + توكن Supabase ────────
   const [quizzesAvailable, setQuizzesAvailable] = useState<QuizAvailable[]>([])
   const [accessToken, setAccessToken] = useState('')
 
@@ -444,7 +434,7 @@ export default function StudentPage() {
         return
       }
       setUser(u)
-      if (u.theme_color) setAccentColor(u.theme_color)
+      // ── مُزال: لا نقرأ theme_color بعد الآن، اللون ثابت دائماً ──
 
       const stage = (u.allowed_stages && u.allowed_stages[0]) as StageKey | undefined
       const grade = u.allowed_grades && u.allowed_grades[0]
@@ -498,8 +488,6 @@ export default function StudentPage() {
       .then(d => setAssignments(d.assignments ?? []))
   }, [user, tab])
 
-  // ── جديد: جلب access_token من جلسة Supabase الحقيقية —
-  // مطلوب لاستدعاء /api/quizzes/available (Bearer auth) ──────────
   useEffect(() => {
     if (!user) return
     supabase.auth.getSession().then(({ data }) => {
@@ -507,7 +495,6 @@ export default function StudentPage() {
     })
   }, [user])
 
-  // ── جديد: جلب الاختبارات المتاحة عند فتح تبويب "مهامي" ─────────
   useEffect(() => {
     if (!accessToken || tab !== 'assignments') return
     fetch('/api/quizzes/available', { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -546,27 +533,7 @@ export default function StudentPage() {
     return () => clearInterval(iv)
   }, [user])
 
-  async function saveSettings() {
-    if (!user) return
-    setSavingSet(true)
-    try {
-      await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          theme_color: accentColor,
-          theme_mode: 'light',
-        }),
-      })
-      const updated = { ...user, theme_color: accentColor }
-      setUser(updated)
-      localStorage.setItem('mosaed_user', JSON.stringify(updated))
-    } finally {
-      setSavingSet(false)
-      setShowSettings(false)
-    }
-  }
+  // ── مُزال: saveSettings (كانت تحفظ theme_color فقط — لا حاجة لها) ──
 
   function handleLogout() {
     localStorage.removeItem('mosaed_user')
@@ -806,21 +773,8 @@ export default function StudentPage() {
               inputBg={T.inputBg}
               isDark={false}
             />
-            <button
-              onClick={() => setShowSettings(true)}
-              style={{
-                padding: '10px 14px',
-                borderRadius: 14,
-                border: `1px solid ${T.borderCol}`,
-                background: T.cardBg,
-                color: T.textCol,
-                fontWeight: 800,
-                cursor: 'pointer',
-                fontFamily: T.fontBody,
-              }}
-            >
-              ⚙️ الإعدادات
-            </button>
+            {/* ── مُزال: زر "⚙️ الإعدادات" — كان يحتوي فقط اختيار
+                 لون التمييز، المُلغى الآن بالكامل ── */}
             <button
               onClick={handleLogout}
               style={{
@@ -1242,10 +1196,9 @@ export default function StudentPage() {
           </div>
         )}
 
-        {/* تبويب المهام — جديد: يضم "اختباراتي" + "مهامي" معاً */}
+        {/* تبويب المهام — يضم "اختباراتي" + "مهامي" معاً */}
         {tab === 'assignments' && (
           <div style={{ display: 'grid', gap: 18 }}>
-            {/* ── جديد: قسم الاختبارات التفاعلية ── */}
             <Card
               title="اختباراتي"
               sub="الاختبارات التفاعلية المتاحة لفصلك"
@@ -1315,7 +1268,6 @@ export default function StudentPage() {
               )}
             </Card>
 
-            {/* المهام التقليدية (بلا تغيير) */}
             <Card
               title="مهامي"
               sub="المهام التي تنتظر الإنجاز أو التسليم"
@@ -1424,7 +1376,6 @@ export default function StudentPage() {
         {/* تبويب دروسي */}
         {tab === 'lessons' && (
           <div style={{ display: 'grid', gap: 18 }}>
-            {/* شريط المرحلة الثابت */}
             <div
               style={{
                 display: 'flex',
@@ -1494,7 +1445,6 @@ export default function StudentPage() {
               )}
             </div>
 
-            {/* مستوى ١: شبكة بطاقات المواد */}
             {!selSubject ? (
               subjects.length === 0 ? (
                 <Empty
@@ -1525,7 +1475,6 @@ export default function StudentPage() {
                 </div>
               )
             ) : !selUnit ? (
-              /* مستوى ٢: شبكة بطاقات الوحدات */
               <div style={{ display: 'grid', gap: 14 }}>
                 <button
                   onClick={() => setSelSubject(null)}
@@ -1586,7 +1535,6 @@ export default function StudentPage() {
                 )}
               </div>
             ) : !selLesson ? (
-              /* مستوى ٣: قائمة دروس الوحدة */
               <div style={{ display: 'grid', gap: 10 }}>
                 <button
                   onClick={() => setSelUnit(null)}
@@ -1645,7 +1593,6 @@ export default function StudentPage() {
                 )}
               </div>
             ) : (
-              /* مستوى ٤: تفاصيل الدرس */
               <div style={{ display: 'grid', gap: 14 }}>
                 <button
                   onClick={() => setSelLesson(null)}
@@ -2150,7 +2097,6 @@ export default function StudentPage() {
           </Card>
         )}
       </main>
-
       {/* شريط التبويبات السفلي */}
       <nav
         style={{
@@ -2361,113 +2307,8 @@ export default function StudentPage() {
         </div>
       )}
 
-      {/* مودال الإعدادات */}
-      {showSettings && (
-        <div
-          style={overlayStyle}
-          onClick={e => {
-            if (e.target === e.currentTarget) setShowSettings(false)
-          }}
-        >
-          <div
-            style={{
-              width: '92%',
-              maxWidth: 360,
-              borderRadius: 20,
-              padding: 20,
-              background: T.cardBg,
-              border: `1px solid ${T.borderCol}`,
-              boxShadow: '0 20px 50px rgba(0,0,0,0.14)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 18,
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color: T.titleCol,
-                  margin: 0,
-                  fontFamily: T.fontHeading,
-                }}
-              >
-                ⚙️ إعداداتي
-              </h2>
-              <button onClick={() => setShowSettings(false)} style={closeStyle()}>
-                ✕
-              </button>
-            </div>
-
-            <p
-              style={{
-                fontSize: 14,
-                fontWeight: 800,
-                color: T.titleCol,
-                marginBottom: 14,
-                fontFamily: T.fontBody,
-              }}
-            >
-              🎨 لون التمييز
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                flexWrap: 'wrap',
-                marginBottom: 22,
-              }}
-            >
-              {ACCENT_COLORS.map(col => (
-                <button
-                  key={col}
-                  onClick={() => setAccentColor(col)}
-                  aria-label={`اختر اللون`}
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: '50%',
-                    background: col,
-                    border: 'none',
-                    cursor: 'pointer',
-                    boxShadow:
-                      accentColor === col
-                        ? `0 0 0 3px ${T.bg},0 0 0 5px ${col}`
-                        : 'none',
-                    transition: 'all 0.2s ease',
-                  }}
-                />
-              ))}
-            </div>
-
-            <button
-              onClick={saveSettings}
-              disabled={savingSet}
-              style={{
-                width: '100%',
-                padding: '13px',
-                borderRadius: 14,
-                border: 'none',
-                background: T.gradBlue,
-                color: '#fff',
-                fontWeight: 900,
-                fontSize: 15,
-                cursor: 'pointer',
-                fontFamily: T.fontBody,
-                boxShadow: T.blueGlow,
-                opacity: savingSet ? 0.7 : 1,
-              }}
-            >
-              {savingSet ? '⏳ جارٍ الحفظ...' : '💾 حفظ الإعدادات'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── مُزال: مودال "⚙️ إعداداتي" بالكامل — كان يحتوي فقط
+           اختيار لون التمييز (6 دوائر)، المُلغى الآن بقرار صريح ── */}
 
       {/* مودال المهمة */}
       {openAssign && (

@@ -79,14 +79,8 @@ interface Stats {
   }[]
 }
 
-const THEME_COLORS = [
-  { name: 'عنابي',     value: BRAND.deep,      gradient: BRAND.gradWarm },
-  { name: 'أحمر مِداد', value: BRAND.red,       gradient: `linear-gradient(135deg,${BRAND.red},${BRAND.crimson})` },
-  { name: 'قرمزي',     value: BRAND.crimson,   gradient: `linear-gradient(135deg,${BRAND.crimson},${BRAND.orangeRed})` },
-  { name: 'برتقالي أحمر', value: BRAND.orangeRed, gradient: `linear-gradient(135deg,${BRAND.orangeRed},${BRAND.orange})` },
-  { name: 'برتقالي',   value: BRAND.orange,    gradient: BRAND.gradGold },
-  { name: 'ذهبي',      value: BRAND.gold,      gradient: `linear-gradient(135deg,${BRAND.orange},${BRAND.gold})` },
-]
+// ── مُزال: THEME_COLORS (اختيار لون التمييز) — أُلغيت الميزة بالكامل
+// بقرار صريح، استُبدلت بهويّة بصريّة ثابتة واحدة (BRAND.gradMain) ────
 
 function getEmbedUrl(url: string): string | null {
   if (!url) return null
@@ -103,7 +97,9 @@ export default function TeacherPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [user,         setUser]         = useState<User | null>(null)
-  const [themeColor,   setThemeColor]   = useState<string>(BRAND.red)
+  // ── مُعدَّل: themeColor أصبح ثابتاً (BRAND.deep) — لا اختيار بعد
+  // الآن، الهويّة البصريّة للمنصّة موحَّدة بالكامل (نهاري/ليلي فقط) ──
+  const themeColor = BRAND.deep
   const [themeMode,    setThemeMode]    = useState<'light' | 'dark'>('light')
   const [showSettings, setShowSettings] = useState(false)
   const [tab,          setTab]          = useState<Tab>('assignments')
@@ -176,7 +172,7 @@ export default function TeacherPage() {
       return
     }
     setUser(u)
-      if (u.theme_color) setThemeColor(u.theme_color)
+      // ── مُزال: لا نقرأ theme_color من المستخدم بعد، اللون ثابت دائماً ──
       if (u.theme_mode === 'dark') setThemeMode('dark')
     } catch { router.replace('/') }
   }, [router])
@@ -232,6 +228,7 @@ export default function TeacherPage() {
     if (tab === 'assignments') {
       fetch(`/api/assignments?teacherId=${user.id}`, { headers: { Authorization: `Bearer ${accessToken}` } })
         .then(r => r.json()).then(d => setAssignments(d.assignments ?? []))
+      loadClasses() // ── مُصحَّح: تُحتاج أيضاً لقائمة استهداف "فصل" هنا، لا فقط تبويب الفصول نفسه ──
     }
     if (tab === 'classes')     loadClasses()
     if (tab === 'submissions') fetch(`/api/submissions?teacherId=${user.id}`).then(r => r.json()).then(d => setSubmissions(d.submissions ?? []))
@@ -513,7 +510,7 @@ export default function TeacherPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push('/dashboard')} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${themeColor}44`, background: `${themeColor}15`, color: themeColor, cursor: 'pointer', fontFamily: 'inherit' }}>✨ أدوات التوليد</button>
           <button onClick={toggleThemeMode} title={isDark ? 'الوضع النهاري' : 'الوضع الليلي'} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontFamily: 'inherit' }}>{isDark ? '☀️' : '🌙'}</button>
-          <button onClick={() => setShowSettings(true)} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid ${borderCol}`, background: 'transparent', color: subCol, cursor: 'pointer', fontFamily: 'inherit' }}>⚙️</button>
+          {/* ── مُزال: زر ⚙️ الإعدادات — لا محتوى فعلي بقي فيه ── */}
           <button onClick={handleLogout} style={{ padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1.5px solid rgba(180,40,40,0.4)`, background: 'rgba(180,40,40,0.1)', color: BRAND.crimson, cursor: 'pointer', fontFamily: 'inherit' }}>🚪 خروج</button>
         </div>
       </header>
@@ -561,18 +558,44 @@ export default function TeacherPage() {
                   ))}
                 </div>
 
+                {/* ── مُصحَّح: button بدل label+input (كان لا يستجيب للنقر
+                     بسبب تعارض محتمل بين معالج label وسلوك input الافتراضي) ── */}
                 {aTarget === 'student' && (
-                  <select multiple value={aTargetIds} onChange={e => setATargetIds(Array.from(e.target.selectedOptions, o => o.value))} style={{ ...inputStyle, minHeight: 120 }}>
-                    {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.email})</option>)}
-                  </select>
+                  <div style={{ maxHeight: 220, overflowY: 'auto', borderRadius: 12, border: `1.5px solid ${borderCol}`, background: inputBg }}>
+                    {students.length === 0 ? (
+                      <p style={{ fontSize: 12, color: subCol, padding: 14, margin: 0 }}>لا يوجد طلاب متاحون.</p>
+                    ) : students.map(s => {
+                      const checked = aTargetIds.includes(s.id)
+                      return (
+                        <button key={s.id} type="button"
+                          onClick={() => setATargetIds(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                          style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${borderCol}`, border: 'none', borderBottomWidth: 1, cursor: 'pointer', background: checked ? `${themeColor}16` : 'transparent', fontFamily: 'inherit', textAlign: 'right' }}>
+                          <span style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${checked ? themeColor : subCol}`, background: checked ? themeColor : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>{checked ? '✓' : ''}</span>
+                          <span style={{ fontSize: 13, color: checked ? themeColor : textCol, fontWeight: checked ? 700 : 400 }}>{s.name} ({s.email})</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
                 {aTarget === 'class' && (
-                  <select multiple value={aTargetIds} onChange={e => setATargetIds(Array.from(e.target.selectedOptions, o => o.value))} style={{ ...inputStyle, minHeight: 120 }}>
-                    {classes.map(g => <option key={g.id} value={g.id}>{g.name} ({g.students_count} طالب)</option>)}
-                  </select>
+                  <div style={{ maxHeight: 220, overflowY: 'auto', borderRadius: 12, border: `1.5px solid ${borderCol}`, background: inputBg }}>
+                    {classes.length === 0 ? (
+                      <p style={{ fontSize: 12, color: subCol, padding: 14, margin: 0 }}>لا توجد فصول متاحة.</p>
+                    ) : classes.map(g => {
+                      const checked = aTargetIds.includes(g.id)
+                      return (
+                        <button key={g.id} type="button"
+                          onClick={() => setATargetIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])}
+                          style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${borderCol}`, border: 'none', borderBottomWidth: 1, cursor: 'pointer', background: checked ? `${themeColor}16` : 'transparent', fontFamily: 'inherit', textAlign: 'right' }}>
+                          <span style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${checked ? themeColor : subCol}`, background: checked ? themeColor : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>{checked ? '✓' : ''}</span>
+                          <span style={{ fontSize: 13, color: checked ? themeColor : textCol, fontWeight: checked ? 700 : 400 }}>{g.name} ({g.students_count} طالب)</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
-                {(aTarget === 'student' || aTarget === 'class') && (
-                  <p style={{ fontSize: 11, color: subCol, marginTop: 4 }}>اضغط Ctrl (أو Cmd) لاختيار أكثر من عنصر.</p>
+                {(aTarget === 'student' || aTarget === 'class') && aTargetIds.length > 0 && (
+                  <p style={{ fontSize: 11, color: themeColor, marginTop: 6, fontWeight: 700 }}>✅ تم تحديد {aTargetIds.length} عنصر</p>
                 )}
               </div>
 
@@ -582,7 +605,7 @@ export default function TeacherPage() {
               </div>
 
               <button onClick={sendAssignment} disabled={sendingA || !aTitle.trim() || !aQuizId}
-                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (aTitle.trim() && aQuizId) ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: (aTitle.trim() && aQuizId) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (aTitle.trim() && aQuizId) ? BRAND.gradMain : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: (aTitle.trim() && aQuizId) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {sendingA ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الإرسال...</> : '📤 إرسال المهمة'}
               </button>
             </div>
@@ -619,7 +642,7 @@ export default function TeacherPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h2 style={{ fontSize: 20, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '4px 14px', borderRadius: 10, margin: 0 , fontFamily: BRAND.fontHeading }}>🏫 الفصول ({classes.length})</h2>
               <button onClick={() => { setShowNewG(true); setClassError('') }}
-                style={{ padding: '10px 20px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '10px 20px', borderRadius: 12, border: 'none', background: BRAND.gradMain, color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
                 ＋ فصل جديد
               </button>
             </div>
@@ -684,7 +707,7 @@ export default function TeacherPage() {
                           {sub.answer_text.slice(0, 150)}{sub.answer_text.length > 150 ? '...' : ''}
                         </div>
                         <button onClick={() => { setOpenSub(sub); setTGrade(String(sub.teacher_grade ?? sub.ai_grade ?? '')); setTFeedback(sub.teacher_feedback ?? sub.ai_feedback ?? '') }}
-                          style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: isPending ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : `${themeColor}22`, color: isPending ? '#1a1a2e' : themeColor, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '8px 18px', borderRadius: 10, border: 'none', background: isPending ? BRAND.gradMain : `${themeColor}22`, color: isPending ? '#1a1a2e' : themeColor, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                           {isPending ? '✏️ مراجعة وتصحيح' : '👁️ عرض التفاصيل'}
                         </button>
                       </div>
@@ -758,7 +781,7 @@ export default function TeacherPage() {
                 )}
               </div>
               <button onClick={uploadMedia} disabled={uploadingM || !mTitle.trim() || (mLinkType === 'link' ? !mUrl.trim() : !mFile)}
-                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (mTitle && (mUrl || mFile)) ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: (mTitle && (mUrl || mFile)) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                style={{ padding: '14px', borderRadius: 14, border: 'none', background: (mTitle && (mUrl || mFile)) ? BRAND.gradMain : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: (mTitle && (mUrl || mFile)) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {uploadingM ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الرفع...</> : '📤 إضافة الوسيط'}
               </button>
             </div>
@@ -1017,7 +1040,7 @@ export default function TeacherPage() {
               </div>
               <p style={{ fontSize: 12, color: subCol, margin: 0 }}>بعد الإنشاء، افتح الفصل لإضافة الطلاب إليه.</p>
               <button onClick={createClass} disabled={creatingG || !gName.trim()}
-                style={{ padding: '13px', borderRadius: 12, border: 'none', background: gName.trim() ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: gName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                style={{ padding: '13px', borderRadius: 12, border: 'none', background: gName.trim() ? BRAND.gradMain : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: gName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {creatingG ? <><span style={{ width: 16, height: 16, border: '2px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الإنشاء...</> : '✅ إنشاء الفصل'}
               </button>
             </div>
@@ -1123,7 +1146,7 @@ export default function TeacherPage() {
                     </div>
                   </div>
                   <button onClick={submitReview} disabled={reviewing || !tGrade}
-                    style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: tGrade ? `linear-gradient(135deg,${themeColor},${BRAND.gold})` : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: tGrade ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: tGrade ? BRAND.gradMain : borderCol, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: tGrade ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {reviewing ? <><span style={{ width: 18, height: 18, border: '3px solid #1a1a2e44', borderTopColor: '#1a1a2e', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />جارٍ الحفظ...</> : '💾 حفظ التصحيح وإرسال الدرجة'}
                   </button>
                 </>
@@ -1157,24 +1180,9 @@ export default function TeacherPage() {
         </div>
       )}
 
-      {/* ══ الإعدادات (بلا تغيير) ══════════════════════════════════════ */}
-      {showSettings && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}>
-          <div style={{ width: '90%', maxWidth: 380, borderRadius: 24, padding: 28, background: cardBg, border: `1px solid ${borderCol}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: themeColor, background: `${themeColor}14`, display: 'inline-block', padding: '3px 12px', borderRadius: 8, margin: 0 , fontFamily: BRAND.fontHeading }}>⚙️ الإعدادات</h2>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 15, fontWeight: 700, color: textCol, marginBottom: 12 }}>🎨 لون المظهر</p>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {THEME_COLORS.map((th, i) => <button key={`${th.value}-${i}`} title={th.name} onClick={() => setThemeColor(th.value)} style={{ width: 44, height: 44, borderRadius: '50%', background: th.gradient, border: 'none', cursor: 'pointer', boxShadow: themeColor === th.value ? `0 0 0 3px ${bg}, 0 0 0 5px ${th.value}` : 'none', transition: 'all 0.2s' }} />)}
-              </div>
-            </div>
-            <button onClick={saveSettings} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>💾 حفظ</button>
-          </div>
-        </div>
-      )}
+      {/* ── مُزال: مودال "⚙️ الإعدادات" — كان يحتوي فقط اختيار لون
+           المظهر (المُلغى الآن)، فلم يبقَ فيه محتوى فعلي. الوضع
+           الليلي/النهاري له زرّه المستقل في الهيدر (🌙/☀️) بالفعل ── */}
     </div>
   )
 }

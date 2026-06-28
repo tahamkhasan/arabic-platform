@@ -25,10 +25,16 @@ const TOOLS = t.tools as readonly { id: string; icon: string; label: string; des
 
 // ──────────────────────────────────────────────────────────────
 // لون ثابت للعناصر الحساسة بالهوية (شعار المنصة، أزرار الهيدر
-// الإدارية، شارات الهيرو) — لا يتبع أبداً اختيار المستخدم الشخصي
-// لـ themeColor، حتى لو اختار المستخدم لوناً غير متّسق بالهوية.
+// الإدارية، شارات الهيرو) — لا يتبع أبداً اختيار المستخدم الشخصي.
 // ──────────────────────────────────────────────────────────────
 const FIXED_BRAND_COLOR = BRAND.deep
+
+// ── مُعدَّل: themeColor أصبح ثابتاً بالكامل في كل الواجهة (لا
+// اختيار شخصي بعد الآن) — استُخدِم نفس FIXED_BRAND_COLOR، وأي
+// مكان كان يبني تدرّجاً يدوياً من themeColor يستخدم BRAND.gradMain
+// الثابت مباشرة. هذا يحافظ على الهويّة البصريّة (التدرّج العنابي
+// ← القرمزي ← البرتقالي الموجود أصلاً في الأزرار الكبيرة) بلا أي
+// تخصيص شخصي قابل للتغيير. ──────────────────────────────────────
 
 // ── لوحتا الألوان: فاتح وداكن — مع تحويل الذهبي إلى نبيتي ──────
 const LIGHT_THEME = {
@@ -55,15 +61,15 @@ const LIGHT_THEME = {
   primaryDeep: BRAND.deep,
   crimson: BRAND.crimson,
 
-  gold: BRAND.crimson, // 🔴 تحويل الذهبي إلى قرمزي نبيتي
+  gold: BRAND.crimson,
   blue: '#2563EB',
   blueDark: '#1D4ED8',
-  green: BRAND.crimson, // 🔴 تحويل الأخضر إلى قرمزي
+  green: BRAND.crimson,
   danger: BRAND.crimson,
 
   gradMain: BRAND.gradMain,
   gradBlue: BRAND.gradBlue,
-  gradWarm: `linear-gradient(135deg, rgba(140,20,40,0.10), ${BRAND.bgSoft})`, // 🔴 نبيتي بدلاً من برتقالي
+  gradWarm: `linear-gradient(135deg, rgba(140,20,40,0.10), ${BRAND.bgSoft})`,
 
   shadowSoft: BRAND.shadow,
   shadowCard: BRAND.shadowWarm,
@@ -85,21 +91,21 @@ const DARK_THEME = {
   subCol: '#B5A99C',
   mutedCol: '#8F8378',
 
-  borderCol: 'rgba(140,20,40,0.25)', // 🔴 نبيتي بدلاً من برتقالي
+  borderCol: 'rgba(140,20,40,0.25)',
   borderSoft: 'rgba(140,20,40,0.18)',
   inputBg: 'rgba(255,255,255,0.05)',
   inputBorder: 'rgba(255,255,255,0.10)',
 
-  primary: BRAND.crimson, // 🔴 قرمزي بدلاً من برتقالي
+  primary: BRAND.crimson,
   primaryHover: BRAND.red,
   primarySoft: 'rgba(140,20,40,0.15)',
   primaryDeep: BRAND.deep,
   crimson: BRAND.crimson,
 
-  gold: BRAND.crimson, // 🔴 تحويل الذهبي إلى قرمزي
+  gold: BRAND.crimson,
   blue: '#4FA0FE',
   blueDark: '#2563EB',
-  green: BRAND.crimson, // 🔴 تحويل الأخضر إلى قرمزي
+  green: BRAND.crimson,
   danger: BRAND.crimson,
 
   gradMain: BRAND.gradMain,
@@ -113,17 +119,14 @@ const DARK_THEME = {
   fontHeading: BRAND.fontHeading,
 }
 
-// لوحة ألوان التمييز الشخصي — إزالة الذهبي واستبداله بألوان نبيتية
-const ACCENT_COLORS = [BRAND.deep, BRAND.red, BRAND.crimson, BRAND.orangeRed, BRAND.orange]
-
 export default function DashboardPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<User | null>(null)
-  const [themeColor, setThemeColor] = useState<string>(LIGHT_THEME.primaryDeep)
+  // ── مُعدَّل: themeColor ثابت — لا useState قابل للتغيير، ولا
+  // قراءة/كتابة theme_color من/إلى قاعدة البيانات بعد الآن ────────
+  const themeColor = FIXED_BRAND_COLOR
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light')
-  const [showSettings, setShowSettings] = useState(false)
-  const [savingSettings, setSavingSettings] = useState(false)
 
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [units, setUnits] = useState<Unit[]>([])
@@ -157,14 +160,12 @@ export default function DashboardPage() {
     try {
       const u = JSON.parse(saved) as User
       if (u.user_type === 'student') { router.replace('/student'); return }
-      // ── جديد: حساب لم يوافَق عليه أو مُعلَّق لا يدخل المحتوى ──
-      // (نفس الفجوة الموجودة سابقاً في app/student/page.tsx)
       if (u.status === 'pending' || u.status === 'suspended') {
         router.replace('/pending-approval')
         return
       }
       setUser(u)
-      if (u.theme_color) setThemeColor(u.theme_color)
+      // ── مُزال: لا نقرأ theme_color بعد الآن، اللون ثابت دائماً ──
       if (u.theme_mode === 'dark') setThemeMode('dark')
     } catch {
       router.replace('/')
@@ -203,7 +204,6 @@ export default function DashboardPage() {
       .catch(console.error)
   }, [tool, selSubject, examType])
 
-  // ── الوضع الليلي: لوحة الألوان الفعّالة ──
   const isDark = themeMode === 'dark'
   const T = isDark ? DARK_THEME : LIGHT_THEME
 
@@ -291,27 +291,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function saveSettings() {
-    if (!user) return
-    setSavingSettings(true)
-    try {
-      await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          theme_color: themeColor,
-          theme_mode: themeMode,
-        }),
-      })
-      const updated = { ...user, theme_color: themeColor, theme_mode: themeMode }
-      setUser(updated)
-      localStorage.setItem('mosaed_user', JSON.stringify(updated))
-    } finally {
-      setSavingSettings(false)
-      setShowSettings(false)
-    }
-  }
+  // ── مُزال: saveSettings (كانت تحفظ theme_color فقط — لا حاجة لها) ──
 
   function toggleThemeMode() {
     if (!user) return
@@ -340,7 +320,6 @@ export default function DashboardPage() {
   const displayText = savedText || output
 
   if (!user) return null
-
   return (
     <div
       dir="rtl"
@@ -401,11 +380,6 @@ export default function DashboardPage() {
               م
             </div>
             <div>
-              {/*
-                ثابت بـ FIXED_BRAND_COLOR (BRAND.deep) عمداً — هذه شارة
-                هوية المنصة، لا تتبع لون التمييز الشخصي لأي مستخدم
-                (مدير أو معلم)، بخلاف بقية عناصر هذه الصفحة.
-              */}
               <div
                 style={{
                   fontSize: 16,
@@ -427,13 +401,6 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            {/*
-              أزرار الهيدر الإدارية (إدارة الطلاب / سجل التوليدات) ثابتة
-              بـ FIXED_BRAND_COLOR أيضاً — كانت تتبع themeColor سابقاً،
-              وهذا ما تسبب بظهورها بالذهبي حين اختار المستخدم لوناً
-              شخصياً مغايراً للهوية. زر تبديل الوضع الليلي/النهاري والإعدادات
-              وتسجيل الخروج تبقى محايدة كما كانت.
-            */}
             <HeaderBtn label="👨‍🏫 إدارة الطلاب" color={FIXED_BRAND_COLOR} bordered onClick={() => router.push('/teacher')} T={T} />
             <HeaderBtn label="📚 سجل التوليدات" color={FIXED_BRAND_COLOR} bordered onClick={() => router.push('/history')} T={T} />
             <HeaderBtn
@@ -442,7 +409,8 @@ export default function DashboardPage() {
               onClick={toggleThemeMode}
               T={T}
             />
-            <HeaderBtn label={t.settings.title} color={subCol} onClick={() => setShowSettings(true)} T={T} />
+            {/* ── مُزال: زر "⚙️ الإعدادات" — كان يحتوي فقط اختيار
+                 لون التمييز (المُلغى الآن بالكامل) ── */}
             <HeaderBtn label={c.logout} color={T.danger} danger onClick={handleLogout} T={T} />
             <NotificationBell
               userId={user.id}
@@ -471,11 +439,6 @@ export default function DashboardPage() {
         >
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 18, alignItems: 'center' }}>
             <div>
-              {/*
-                شارة "مساحة المعلم لإنتاج المحتوى" ثابتة بـ FIXED_BRAND_COLOR
-                أيضاً — عنصر هوية متكرر في كل تحميل للصفحة، وليس عنصر
-                تخصيص شخصي تفاعلي كالبطاقات أدناه.
-              */}
               <div
                 style={{
                   display: 'inline-flex',
@@ -496,12 +459,6 @@ export default function DashboardPage() {
 
               <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.35, fontWeight: 900, color: T.titleCol , fontFamily: BRAND.fontHeading }}>
                 اختر الدرس ثم
-                {/*
-                  التظليل على "أنشئ شرحك واختبارك وخطتك" يبقى تابعاً
-                  لـ themeColor الشخصي عمداً (وليس FIXED_BRAND_COLOR) —
-                  بعد تصحيح theme_color المخزّن في قاعدة البيانات لهذا
-                  الحساب، سيظهر بالنبيتي تلقائياً دون أي تعديل إضافي هنا.
-                */}
                 <span
                   style={{
                     color: themeColor,
@@ -983,96 +940,8 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {showSettings && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 100,
-            background: 'rgba(33,28,23,0.38)',
-            backdropFilter: 'blur(6px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}
-        >
-          <div
-            style={{
-              width: '90%',
-              maxWidth: 400,
-              borderRadius: 24,
-              padding: 28,
-              background: T.cardBg,
-              border: `1px solid ${borderCol}`,
-              boxShadow: T.shadowSoft,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2
-                style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color: themeColor,
-                  background: `${themeColor}14`,
-                  display: 'inline-block',
-                  padding: '3px 12px',
-                  borderRadius: 8,
-                  margin: 0,
-                  fontFamily: BRAND.fontHeading,
-                }}
-              >
-                {t.settings.title}
-              </h2>
-              <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: subCol, fontSize: 22, cursor: 'pointer' }}>✕</button>
-            </div>
-
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ fontSize: 15, fontWeight: 800, color: textCol, marginBottom: 12 }}>🎨 لون التمييز</p>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {ACCENT_COLORS.map(col => (
-                  <button
-                    key={col}
-                    title={col}
-                    onClick={() => setThemeColor(col)}
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: col,
-                      border: 'none',
-                      cursor: 'pointer',
-                      boxShadow: themeColor === col ? `0 0 0 3px ${T.bg}, 0 0 0 6px ${col}` : 'none',
-                      transition: 'all 0.2s',
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={saveSettings}
-              disabled={savingSettings}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: 14,
-                border: 'none',
-                background: T.gradBlue,
-                color: '#fff',
-                fontWeight: 900,
-                fontSize: 16,
-                cursor: savingSettings ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: savingSettings ? 0.7 : 1,
-                boxShadow: T.blueGlow,
-              }}
-            >
-              {savingSettings ? c.saving : '💾 حفظ الإعدادات'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── مُزال: مودال "⚙️ الإعدادات" بالكامل — كان يحتوي فقط
+           اختيار لون التمييز (5 دوائر)، المُلغى الآن بقرار صريح ── */}
 
       <footer
         style={{
