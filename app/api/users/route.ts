@@ -1,90 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServiceClient, requireAdmin } from '@/lib/server/auth'
+import { getServiceClient, requireAdminOrPermission } from '@/lib/server/auth'
 
-type RoleRelation =
-  | {
-      id: string
-      key: string
-      name: string
-      description?: string | null
-      permissions?: string[] | null
-      is_active?: boolean | null
-    }
-  | {
-      id: string
-      key: string
-      name: string
-      description?: string | null
-      permissions?: string[] | null
-      is_active?: boolean | null
-    }[]
-  | null
+const SELECT_COLUMNS =
+  'id, email, phone, username, full_name, name, role, user_type, approved, status, allowed_stages, allowed_grades, track'
 
 type UserRow = {
   id: string
   email: string | null
+  phone?: string | null
+  username?: string | null
   full_name?: string | null
+  name?: string | null
   role?: string | null
   user_type?: string | null
   approved?: boolean | null
   status?: string | null
-  created_at?: string | null
-  assigned_role_id?: string | null
   allowed_stages?: string[] | null
   allowed_grades?: string[] | null
   track?: string | null
-  roles?: RoleRelation
-}
-
-// ──────────────────────────────────────────────────────────────
-// جديد: مهلة الحذف التلقائي للحسابات غير المعتمدة (pending) —
-// أي حساب أُنشئ منذ أكثر من هذا العدد من الأيام ولم يوافَق عليه
-// بعد، يُحذف تلقائياً عند أي استدعاء GET (أي عند فتح لوحة الأدمن،
-// بلا حاجة لجدولة/cron خارجي). لا يُطبَّق على status='approved'
-// ولا 'suspended' — فقط 'pending' تحديداً.
-// ──────────────────────────────────────────────────────────────
-const PENDING_AUTO_DELETE_DAYS = 5
-
-function normalizeRoleRelation(roleRelation: RoleRelation) {
-  if (!roleRelation) return null
-
-  const role = Array.isArray(roleRelation) ? roleRelation[0] : roleRelation
-  if (!role) return null
-
-  return {
-    id: role.id,
-    key: role.key,
-    name: role.name,
-    description: role.description ?? null,
-    permissions: role.permissions ?? [],
-    is_active: role.is_active !== false,
-  }
 }
 
 function mapUserRow(row: UserRow) {
   return {
     id: row.id,
     email: row.email ?? null,
-    full_name: row.full_name ?? null,
+    phone: row.phone ?? null,
+    username: row.username ?? null,
+    full_name: row.full_name ?? row.name ?? null,
+    name: row.name ?? row.full_name ?? null,
     role: row.role ?? null,
     user_type: row.user_type ?? null,
     approved: row.approved ?? null,
     status: row.status ?? null,
-    created_at: row.created_at ?? null,
-    assigned_role_id: row.assigned_role_id ?? null,
-    assigned_role: normalizeRoleRelation(row.roles ?? null),
     allowed_stages: row.allowed_stages ?? [],
     allowed_grades: row.allowed_grades ?? [],
     track: row.track ?? null,
   }
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((v) => typeof v === 'string')
+function normalizeText(value: unknown) {
+  return String(value ?? '').trim()
 }
 
-// يتحقق من قيمة التشعيب: فقط null أو 'scientific' أو 'literary'
-// (مطابق لقيد chk_users_track_value المُضاف على عمود users.track)
+function normalizeEmail(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function normalizeUsername(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function normalizePhone(value: unknown) {
+  let phone = String(value ?? '').trim()
+  if (!phone) return ''
+
+  phone = phone.replace(/[^\d+]/g, '')
+
+  if (phone.startsWith('00')) {
+    phone = `+${phone.slice(2)}`
+  }
+
+  return phone
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function isValidPhone(value: string) {
+  return /^\+?\d{8,15}$/.test(value)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
 function validateTrackValue(track: unknown): string | null {
   if (track === null) return null
   if (track !== 'scientific' && track !== 'literary') {
@@ -93,122 +83,338 @@ function validateTrackValue(track: unknown): string | null {
   return null
 }
 
-const SELECT_COLUMNS = `
-  id,
-  email,
-  full_name,
-  role,
-  user_type,
-  approved,
-  status,
-  created_at,
-  assigned_role_id,
-  allowed_stages,
-  allowed_grades,
-  track,
-  roles:assigned_role_id (
-    id,
-    key,
-    name,
-    description,
-    permissions,
-    is_active
-  )
-`
-
-// ── جديد: حذف الحسابات المعلَّقة منذ أكثر من PENDING_AUTO_DELETE_DAYS ──
-// تُستدعى من GET فقط — أي فتح لوحة الأدمن يُطلق هذا الفحص تلقائياً.
-// فشل هذه الدالة لا يُسقِط GET نفسه؛ فقط يُسجَّل في الكونسول.
-async function purgeExpiredPendingUsers(
-  supabase: ReturnType<typeof getServiceClient>
-) {
-  try {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - PENDING_AUTO_DELETE_DAYS)
-
-    const { data: expired, error: fetchError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('status', 'pending')
-      .lt('created_at', cutoff.toISOString())
-
-    if (fetchError) {
-      console.error('purgeExpiredPendingUsers fetch error:', fetchError)
-      return
-    }
-
-    if (!expired || expired.length === 0) return
-
-    for (const u of expired) {
-      try {
-        const { error: dbDeleteError } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', u.id)
-
-        if (dbDeleteError) {
-          console.error(`purgeExpiredPendingUsers: failed to delete users row ${u.id}:`, dbDeleteError)
-          continue
-        }
-
-        // حذف حساب Auth أيضاً — فشل هذه الخطوة بمفردها لا يُعاد إدراج
-        // الصف المحذوف؛ يُسجَّل فقط للمراجعة (قد يتبقى حساب Auth "يتيم"
-        // بلا صفّ مقابل في users، وهو أقل ضرراً من إبقاء حساب pending
-        // معلَّق إلى الأبد في الواجهة).
-        try {
-          await supabase.auth.admin.deleteUser(u.id)
-        } catch (authDeleteErr) {
-          console.error(`purgeExpiredPendingUsers: failed to delete auth user ${u.id}:`, authDeleteErr)
-        }
-      } catch (innerErr) {
-        console.error(`purgeExpiredPendingUsers: unexpected error for ${u.id}:`, innerErr)
-      }
-    }
-
-    console.log(`purgeExpiredPendingUsers: removed ${expired.length} expired pending user(s).`)
-  } catch (err) {
-    console.error('purgeExpiredPendingUsers unexpected error:', err)
-  }
-}
-
-// GET: إرجاع قائمة المستخدمين للإدارة
 export async function GET(req: NextRequest) {
-  const auth = await requireAdmin(req)
+  const auth = await requireAdminOrPermission(req, 'manage_student_accounts')
   if (!auth.ok) return auth.response
 
   try {
     const supabase = getServiceClient()
 
-    // ── جديد: تنظيف الحسابات المعلَّقة منتهية المهلة قبل الإرجاع ──
-    await purgeExpiredPendingUsers(supabase)
+    const searchParams = req.nextUrl.searchParams
+    const role = searchParams.get('role')?.trim() || null
+    const status = searchParams.get('status')?.trim() || null
+    const q = searchParams.get('q')?.trim() || null
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('users')
       .select(SELECT_COLUMNS)
-      .order('created_at', { ascending: false })
+      .order('full_name', { ascending: true })
+
+    if (role) {
+      query = query.eq('role', role)
+    }
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    if (q) {
+      query = query.or(
+        [
+          `full_name.ilike.%${q}%`,
+          `name.ilike.%${q}%`,
+          `email.ilike.%${q}%`,
+          `username.ilike.%${q}%`,
+          `phone.ilike.%${q}%`,
+        ].join(',')
+      )
+    }
+
+    const { data, error } = await query
 
     if (error) {
+      console.error('Users GET query error:', error)
       return NextResponse.json(
-        { error: error.message || 'Failed to load users.' },
-        { status: 500 },
+        { error: error.message || 'فشل جلب المستخدمين.' },
+        { status: 500 }
       )
     }
 
     return NextResponse.json({
-      items: (data || []).map((row) => mapUserRow(row as unknown as UserRow)),
+      success: true,
+      items: (data ?? []).map(row => mapUserRow(row as UserRow)),
     })
-  } catch {
+  } catch (err) {
+    console.error('Users GET error', err)
     return NextResponse.json(
       { error: 'Unexpected error while loading users.' },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }
 
-// PATCH: تحديث بيانات مستخدم (الموافقة على الطالب، تعليق/إلغاء تعليق،
-// والآن أيضاً: مرحلة/صف/تشعيب الطالب)
+export async function POST(req: NextRequest) {
+  const auth = await requireAdminOrPermission(req, 'manage_student_accounts')
+  if (!auth.ok) return auth.response
+
+  try {
+    const supabase = getServiceClient()
+
+    const body = (await req.json().catch(() => null)) as
+      | {
+          full_name?: string
+          username?: string
+          email?: string | null
+          phone?: string | null
+          password?: string
+          allowed_stages?: string[]
+          allowed_grades?: string[]
+          track?: string | null
+        }
+      | null
+
+    if (!body) {
+      return NextResponse.json(
+        { error: 'البيانات المرسلة غير صالحة.' },
+        { status: 400 }
+      )
+    }
+
+    const fullName = normalizeText(body.full_name)
+    const username = normalizeUsername(body.username)
+    const email = normalizeEmail(body.email)
+    const phone = normalizePhone(body.phone)
+    const password = String(body.password ?? '')
+    const allowed_stages = body.allowed_stages ?? []
+    const allowed_grades = body.allowed_grades ?? []
+    const track = typeof body.track === 'undefined' ? null : body.track
+
+    if (!fullName) {
+      return NextResponse.json(
+        { error: 'الاسم الكامل مطلوب.' },
+        { status: 400 }
+      )
+    }
+
+    if (!username) {
+      return NextResponse.json(
+        { error: 'اسم المستخدم مطلوب.' },
+        { status: 400 }
+      )
+    }
+
+    if (!/^[a-z0-9._-]{3,30}$/i.test(username)) {
+      return NextResponse.json(
+        {
+          error:
+            'اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا/رقمًا، ويُسمح بـ . _ - فقط.',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!password || password.length < 8) {
+      return NextResponse.json(
+        { error: 'كلمة المرور يجب ألا تقل عن 8 أحرف.' },
+        { status: 400 }
+      )
+    }
+
+    if (!email && !phone) {
+      return NextResponse.json(
+        { error: 'أدخل البريد الإلكتروني أو رقم الهاتف على الأقل.' },
+        { status: 400 }
+      )
+    }
+
+    if (email && !isValidEmail(email)) {
+      return NextResponse.json(
+        { error: 'البريد الإلكتروني غير صالح.' },
+        { status: 400 }
+      )
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      return NextResponse.json(
+        { error: 'رقم الهاتف غير صالح.' },
+        { status: 400 }
+      )
+    }
+
+    if (!isStringArray(allowed_stages)) {
+      return NextResponse.json(
+        { error: 'allowed_stages يجب أن تكون مصفوفة نصوص.' },
+        { status: 400 }
+      )
+    }
+
+    if (!isStringArray(allowed_grades)) {
+      return NextResponse.json(
+        { error: 'allowed_grades يجب أن تكون مصفوفة نصوص.' },
+        { status: 400 }
+      )
+    }
+
+    const trackError = validateTrackValue(track)
+    if (trackError) {
+      return NextResponse.json({ error: trackError }, { status: 400 })
+    }
+
+    const needsTrack = allowed_grades.some(g => g === '11' || g === '12')
+    if (needsTrack && !track) {
+      return NextResponse.json(
+        { error: 'الصف 11 أو 12 يتطلب تحديد التشعيب.' },
+        { status: 400 }
+      )
+    }
+
+    const { data: existingUsername, error: usernameCheckError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle()
+
+    if (usernameCheckError) {
+      return NextResponse.json(
+        { error: usernameCheckError.message || 'تعذر التحقق من اسم المستخدم.' },
+        { status: 500 }
+      )
+    }
+
+    if (existingUsername) {
+      return NextResponse.json(
+        { error: 'اسم المستخدم مستخدم بالفعل.' },
+        { status: 409 }
+      )
+    }
+
+    if (email) {
+      const { data: existingEmail, error: emailCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
+
+      if (emailCheckError) {
+        return NextResponse.json(
+          { error: emailCheckError.message || 'تعذر التحقق من البريد الإلكتروني.' },
+          { status: 500 }
+        )
+      }
+
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: 'البريد الإلكتروني مستخدم بالفعل.' },
+          { status: 409 }
+        )
+      }
+    }
+
+    if (phone) {
+      const { data: existingPhone, error: phoneCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle()
+
+      if (phoneCheckError) {
+        return NextResponse.json(
+          { error: phoneCheckError.message || 'تعذر التحقق من رقم الهاتف.' },
+          { status: 500 }
+        )
+      }
+
+      if (existingPhone) {
+        return NextResponse.json(
+          { error: 'رقم الهاتف مستخدم بالفعل.' },
+          { status: 409 }
+        )
+      }
+    }
+
+    const createPayload: {
+      email?: string
+      phone?: string
+      password: string
+      email_confirm?: boolean
+      phone_confirm?: boolean
+      user_metadata?: Record<string, unknown>
+    } = {
+      password,
+      user_metadata: {
+        full_name: fullName,
+        username,
+        role: 'student',
+        user_type: 'student',
+      },
+    }
+
+    if (email) {
+      createPayload.email = email
+      createPayload.email_confirm = true
+    }
+
+    if (phone) {
+      createPayload.phone = phone
+      createPayload.phone_confirm = true
+    }
+
+    const { data: createdAuth, error: createAuthError } =
+      await supabase.auth.admin.createUser(createPayload)
+
+    if (createAuthError || !createdAuth?.user?.id) {
+      return NextResponse.json(
+        { error: createAuthError?.message || 'فشل إنشاء حساب الدخول.' },
+        { status: 500 }
+      )
+    }
+
+    const authUserId = createdAuth.user.id
+
+    const { data: userRow, error: userInsertError } = await supabase
+      .from('users')
+      .upsert(
+        {
+          id: authUserId,
+          email: email || null,
+          phone: phone || null,
+          username,
+          full_name: fullName,
+          name: fullName,
+          role: 'student',
+          user_type: 'student',
+          approved: true,
+          status: 'approved',
+          allowed_stages,
+          allowed_grades,
+          track: track ?? null,
+        },
+        { onConflict: 'id' }
+      )
+      .select(SELECT_COLUMNS)
+      .single()
+
+    if (userInsertError) {
+      try {
+        await supabase.auth.admin.deleteUser(authUserId)
+      } catch (cleanupErr) {
+        console.error('POST /api/users cleanup auth delete error:', cleanupErr)
+      }
+
+      return NextResponse.json(
+        { error: userInsertError.message || 'فشل حفظ بيانات الطالب.' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        item: mapUserRow(userRow as UserRow),
+      },
+      { status: 201 }
+    )
+  } catch (err) {
+    console.error('Users POST error', err)
+    return NextResponse.json(
+      { error: 'Unexpected error while creating user.' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PATCH(req: NextRequest) {
-  const auth = await requireAdmin(req)
+  const auth = await requireAdminOrPermission(req, 'manage_student_accounts')
   if (!auth.ok) return auth.response
 
   try {
@@ -217,80 +423,208 @@ export async function PATCH(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as
       | {
           userId?: string
+          full_name?: string
+          name?: string
+          email?: string | null
+          phone?: string | null
+          username?: string
+          role?: string
+          user_type?: string
+          approved?: boolean
           status?: string
-          role?: string | null
-          usertype?: string | null
-          allowed_stages?: string[]
-          allowed_grades?: string[]
+          allowed_stages?: string[] | string
+          allowed_grades?: string[] | string
           track?: string | null
         }
       | null
 
     if (!body || !body.userId) {
       return NextResponse.json(
-        { error: 'userId is required.' },
-        { status: 400 },
+        { error: 'معرّف المستخدم userId مطلوب.' },
+        { status: 400 }
       )
     }
 
-    const { userId, status, role, usertype, allowed_stages, allowed_grades, track } = body
+    const userId = String(body.userId).trim()
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'معرّف المستخدم غير صالح.' },
+        { status: 400 }
+      )
+    }
+
+    const { data: existingUser, error: existingUserError } = await supabase
+      .from('users')
+      .select('id, allowed_grades, track')
+      .eq('id', userId)
+      .single()
+
+    if (existingUserError || !existingUser) {
+      return NextResponse.json(
+        { error: 'المستخدم غير موجود.' },
+        { status: 404 }
+      )
+    }
 
     const updates: Record<string, unknown> = {}
 
-    if (typeof status === 'string') {
-      updates.status = status
-
-      // لو عندك عمود approved مستقل نربطه بالحالة
-      if (status === 'approved') {
-        updates.approved = true
-      } else if (status === 'pending') {
-        updates.approved = false
+    if (typeof body.full_name !== 'undefined' || typeof body.name !== 'undefined') {
+      const fullName = normalizeText(body.full_name ?? body.name)
+      if (!fullName) {
+        return NextResponse.json(
+          { error: 'الاسم الكامل غير صالح.' },
+          { status: 400 }
+        )
       }
+      updates.full_name = fullName
+      updates.name = fullName
     }
 
-    if (typeof role !== 'undefined') {
-      updates.role = role
+    if (typeof body.email !== 'undefined') {
+      const email = body.email === null ? null : normalizeEmail(body.email)
+      if (email && !isValidEmail(email)) {
+        return NextResponse.json(
+          { error: 'البريد الإلكتروني غير صالح.' },
+          { status: 400 }
+        )
+      }
+      updates.email = email
     }
 
-    if (typeof usertype !== 'undefined') {
-      // اسم العمود في الجدول هو user_type (حسب GET)
-      updates.user_type = usertype
+    if (typeof body.phone !== 'undefined') {
+      const phone = body.phone === null ? null : normalizePhone(body.phone)
+      if (phone && !isValidPhone(phone)) {
+        return NextResponse.json(
+          { error: 'رقم الهاتف غير صالح.' },
+          { status: 400 }
+        )
+      }
+      updates.phone = phone
     }
 
-    // ── جديد — المرحلة ١٠: مرحلة/صف/تشعيب الطالب ─────────────────
-    if (typeof allowed_stages !== 'undefined') {
-      if (!isStringArray(allowed_stages)) {
+    if (typeof body.username !== 'undefined') {
+      const username = normalizeUsername(body.username)
+
+      if (!username) {
+        return NextResponse.json(
+          { error: 'اسم المستخدم غير صالح.' },
+          { status: 400 }
+        )
+      }
+
+      if (!/^[a-z0-9._-]{3,30}$/i.test(username)) {
+        return NextResponse.json(
+          {
+            error:
+              'اسم المستخدم يجب أن يكون من 3 إلى 30 حرفًا/رقمًا، ويُسمح بـ . _ - فقط.',
+          },
+          { status: 400 }
+        )
+      }
+
+      const { data: existingUsername, error: usernameCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .neq('id', userId)
+        .maybeSingle()
+
+      if (usernameCheckError) {
+        return NextResponse.json(
+          { error: usernameCheckError.message || 'تعذر التحقق من اسم المستخدم.' },
+          { status: 500 }
+        )
+      }
+
+      if (existingUsername) {
+        return NextResponse.json(
+          { error: 'اسم المستخدم مستخدم بالفعل.' },
+          { status: 409 }
+        )
+      }
+
+      updates.username = username
+    }
+
+    if (typeof body.role !== 'undefined') {
+      updates.role = body.role
+    }
+
+    if (typeof body.user_type !== 'undefined') {
+      updates.user_type = body.user_type
+    }
+
+    if (typeof body.approved !== 'undefined') {
+      updates.approved = body.approved
+    }
+
+    if (typeof body.status !== 'undefined') {
+      updates.status = body.status
+    }
+
+    let nextAllowedStages = existingUser.allowed_grades ? undefined : undefined
+    void nextAllowedStages
+
+    let nextAllowedGrades = (existingUser.allowed_grades ?? []) as string[]
+    let nextTrack = existingUser.track ?? null
+
+    if (typeof body.allowed_stages !== 'undefined') {
+      const allowedStages = Array.isArray(body.allowed_stages)
+        ? body.allowed_stages
+        : body.allowed_stages
+        ? [String(body.allowed_stages)]
+        : []
+
+      if (!isStringArray(allowedStages)) {
         return NextResponse.json(
           { error: 'allowed_stages يجب أن تكون مصفوفة نصوص.' },
-          { status: 400 },
+          { status: 400 }
         )
       }
-      updates.allowed_stages = allowed_stages
+
+      updates.allowed_stages = allowedStages
     }
 
-    if (typeof allowed_grades !== 'undefined') {
-      if (!isStringArray(allowed_grades)) {
+    if (typeof body.allowed_grades !== 'undefined') {
+      const allowedGrades = Array.isArray(body.allowed_grades)
+        ? body.allowed_grades
+        : body.allowed_grades
+        ? [String(body.allowed_grades)]
+        : []
+
+      if (!isStringArray(allowedGrades)) {
         return NextResponse.json(
           { error: 'allowed_grades يجب أن تكون مصفوفة نصوص.' },
-          { status: 400 },
+          { status: 400 }
         )
       }
-      updates.allowed_grades = allowed_grades
+
+      nextAllowedGrades = allowedGrades
+      updates.allowed_grades = allowedGrades
     }
 
-    if (typeof track !== 'undefined') {
-      const trackError = validateTrackValue(track)
+    if (typeof body.track !== 'undefined') {
+      const trackError = validateTrackValue(body.track)
       if (trackError) {
         return NextResponse.json({ error: trackError }, { status: 400 })
       }
-      updates.track = track
+
+      nextTrack = body.track
+      updates.track = body.track
     }
-    // ──────────────────────────────────────────────────────────────
+
+    const needsTrack = nextAllowedGrades.some(g => g === '11' || g === '12')
+    if (needsTrack && !nextTrack) {
+      return NextResponse.json(
+        { error: 'الصف 11 أو 12 يتطلب تحديد التشعيب.' },
+        { status: 400 }
+      )
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
-        { error: 'No valid fields to update.' },
-        { status: 400 },
+        { error: 'لا توجد بيانات للتحديث.' },
+        { status: 400 }
       )
     }
 
@@ -302,111 +636,22 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) {
+      console.error('Users PATCH error:', error)
       return NextResponse.json(
-        { error: error.message || 'Failed to update user.' },
-        { status: 500 },
+        { error: error.message || 'فشل تحديث المستخدم.' },
+        { status: 500 }
       )
     }
 
     return NextResponse.json({
-      item: mapUserRow(data as unknown as UserRow),
+      success: true,
+      item: mapUserRow(data as UserRow),
     })
   } catch (err) {
-    console.error('Users PATCH error', err)
+    console.error('Users PATCH unexpected error:', err)
     return NextResponse.json(
       { error: 'Unexpected error while updating user.' },
-      { status: 500 },
-    )
-  }
-}
-
-// ── جديد: DELETE — كانت غائبة بالكامل، وهذا سبب "فشل الحذف" الذي
-// كان يظهر في الواجهة (405 Method Not Allowed لعدم وجود أي دالة
-// DELETE مُصدَّرة من هذا الملف أصلاً) ───────────────────────────
-export async function DELETE(req: NextRequest) {
-  const auth = await requireAdmin(req)
-  if (!auth.ok) return auth.response
-
-  try {
-    const supabase = getServiceClient()
-
-    const body = (await req.json().catch(() => null)) as { userId?: string } | null
-
-    if (!body || !body.userId) {
-      return NextResponse.json(
-        { error: 'userId is required.' },
-        { status: 400 },
-      )
-    }
-
-    const { userId } = body
-
-    // حماية إضافية: منع حذف حساب أدمن من هذا المسار عن طريق الخطأ
-    const { data: target, error: targetError } = await supabase
-      .from('users')
-      .select('id, role')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (targetError) {
-      return NextResponse.json(
-        { error: targetError.message || 'تعذّر العثور على المستخدم.' },
-        { status: 500 },
-      )
-    }
-
-    if (!target) {
-      return NextResponse.json(
-        { error: 'المستخدم غير موجود.' },
-        { status: 404 },
-      )
-    }
-
-    if (target.role === 'admin') {
-      return NextResponse.json(
-        { error: 'لا يمكن حذف حساب مدير من هنا.' },
-        { status: 403 },
-      )
-    }
-
-    // حذف الصف من جدول users أولاً
-    const { error: dbDeleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId)
-
-    if (dbDeleteError) {
-      return NextResponse.json(
-        { error: dbDeleteError.message || 'فشل حذف بيانات المستخدم.' },
-        { status: 500 },
-      )
-    }
-
-    // حذف حساب Supabase Auth أيضاً — إن فشلت هذه الخطوة بمفردها،
-    // الصفّ في users محذوف بالفعل، فنُعيد تحذيراً لا فشلاً كاملاً.
-    try {
-      const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId)
-      if (authDeleteError) {
-        console.error('Auth delete error:', authDeleteError)
-        return NextResponse.json({
-          success: true,
-          warning: 'تم حذف بيانات المستخدم، لكن تعذّر حذف حساب تسجيل الدخول الخاص به بالكامل.',
-        })
-      }
-    } catch (authErr) {
-      console.error('Auth delete unexpected error:', authErr)
-      return NextResponse.json({
-        success: true,
-        warning: 'تم حذف بيانات المستخدم، لكن تعذّر حذف حساب تسجيل الدخول الخاص به بالكامل.',
-      })
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error('Users DELETE error', err)
-    return NextResponse.json(
-      { error: 'Unexpected error while deleting user.' },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

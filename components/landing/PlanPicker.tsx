@@ -1,7 +1,9 @@
 'use client'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
+import Button from '@/components/ui/Button'
 
 const B = {
   text: BRAND.text,
@@ -21,8 +23,9 @@ const B = {
   shadow: BRAND.shadow,
   shadowBlue: BRAND.shadowBlue,
 }
-const CALIBRI = BRAND.fontHeading
-const CAIRO = BRAND.fontBody
+
+const HEADING = BRAND.fontHeading
+const BODY = BRAND.fontBody
 
 type Package = {
   id: string
@@ -68,6 +71,21 @@ function describeScope(stage?: string | null, grade?: string | null, track?: str
   return parts.join(' — ')
 }
 
+function selectableCardStyle(active: boolean): React.CSSProperties {
+  return {
+    textAlign: 'right',
+    padding: 20,
+    borderRadius: 20,
+    border: `2px solid ${active ? B.crimson : B.border}`,
+    background: active ? 'rgba(150,30,45,0.06)' : B.card,
+    boxShadow: active ? '0 10px 28px rgba(150,30,45,0.16)' : B.shadow,
+    cursor: 'pointer',
+    fontFamily: BODY,
+    transition: 'all 0.2s',
+    width: '100%',
+  }
+}
+
 export default function PlanPicker() {
   const router = useRouter()
   const [tab, setTab] = useState<PickType>('package')
@@ -80,6 +98,7 @@ export default function PlanPicker() {
   useEffect(() => {
     let mounted = true
     setLoading(true)
+
     Promise.all([
       fetch('/api/subject-packages').then(r => r.json()).catch(() => ({ items: [] })),
       fetch('/api/subjects').then(r => r.json()).catch(() => ({ subjects: [] })),
@@ -92,6 +111,7 @@ export default function PlanPicker() {
       .finally(() => {
         if (mounted) setLoading(false)
       })
+
     return () => {
       mounted = false
     }
@@ -112,46 +132,30 @@ export default function PlanPicker() {
 
   return (
     <div>
-      {/* تبويبا التنقل: باقات / مواد مستقلة */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 32 }}>
-        <button
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 32, flexWrap: 'wrap' }}>
+        <Button
+          type="button"
+          variant={tab === 'package' ? 'primary' : 'secondary'}
+          size="md"
+          title="عرض الباقات"
           onClick={() => setTab('package')}
-          style={{
-            padding: '11px 24px',
-            borderRadius: 999,
-            border: `1.5px solid ${tab === 'package' ? B.crimson : B.border}`,
-            background: tab === 'package' ? 'rgba(150,30,45,0.08)' : 'rgba(255,255,255,0.6)',
-            color: tab === 'package' ? B.crimson : B.sub,
-            fontWeight: 800,
-            fontSize: 14,
-            cursor: 'pointer',
-            fontFamily: CAIRO,
-            transition: 'all 0.2s',
-          }}
         >
           📦 الباقات
-        </button>
-        <button
+        </Button>
+
+        <Button
+          type="button"
+          variant={tab === 'subject' ? 'primary' : 'secondary'}
+          size="md"
+          title="عرض المواد المستقلة"
           onClick={() => setTab('subject')}
-          style={{
-            padding: '11px 24px',
-            borderRadius: 999,
-            border: `1.5px solid ${tab === 'subject' ? B.crimson : B.border}`,
-            background: tab === 'subject' ? 'rgba(150,30,45,0.08)' : 'rgba(255,255,255,0.6)',
-            color: tab === 'subject' ? B.crimson : B.sub,
-            fontWeight: 800,
-            fontSize: 14,
-            cursor: 'pointer',
-            fontFamily: CAIRO,
-            transition: 'all 0.2s',
-          }}
         >
           📚 مواد مستقلة
-        </button>
+        </Button>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '48px 0', color: B.sub }}>
+        <div style={{ textAlign: 'center', padding: '48px 0', color: B.sub, fontFamily: BODY }}>
           <div
             style={{
               width: 40,
@@ -167,9 +171,8 @@ export default function PlanPicker() {
         </div>
       ) : (
         <>
-          {/* قائمة الباقات */}
-          {tab === 'package' && (
-            hasPackages ? (
+          {tab === 'package' &&
+            (hasPackages ? (
               <div
                 style={{
                   display: 'grid',
@@ -180,37 +183,34 @@ export default function PlanPicker() {
               >
                 {packages.map(pkg => {
                   const active = selectedType === 'package' && selectedId === pkg.id
+
                   return (
                     <button
                       key={pkg.id}
+                      type="button"
+                      aria-pressed={active}
+                      title={`اختيار الباقة: ${pkg.name}`}
                       onClick={() => selectPlan('package', pkg.id)}
-                      style={{
-                        textAlign: 'right',
-                        padding: 20,
-                        borderRadius: 20,
-                        border: `2px solid ${active ? B.crimson : B.border}`,
-                        background: active ? 'rgba(150,30,45,0.06)' : B.card,
-                        boxShadow: active ? `0 10px 28px rgba(150,30,45,0.16)` : B.shadow,
-                        cursor: 'pointer',
-                        fontFamily: CAIRO,
-                        transition: 'all 0.2s',
-                      }}
+                      style={selectableCardStyle(active)}
                     >
                       <div style={{ fontSize: 28, marginBottom: 10 }}>📦</div>
+
                       <div
                         style={{
                           fontSize: 16,
                           fontWeight: 900,
-                          fontFamily: CALIBRI,
+                          fontFamily: HEADING,
                           color: B.text,
                           marginBottom: 6,
                         }}
                       >
                         {pkg.name}
                       </div>
-                      <div style={{ fontSize: 13, color: B.sub, marginBottom: 8 }}>
+
+                      <div style={{ fontSize: 13, color: B.sub, marginBottom: 8, fontFamily: BODY }}>
                         {describeScope(pkg.stage, pkg.grade, pkg.track) || 'باقة شاملة'}
                       </div>
+
                       {typeof pkg.subjectsCount === 'number' && (
                         <div
                           style={{
@@ -221,13 +221,23 @@ export default function PlanPicker() {
                             background: 'rgba(150,30,45,0.08)',
                             padding: '4px 10px',
                             borderRadius: 999,
+                            fontFamily: BODY,
                           }}
                         >
                           {pkg.subjectsCount} مادة ضمن الباقة
                         </div>
                       )}
+
                       {active && (
-                        <div style={{ marginTop: 12, fontSize: 13, fontWeight: 900, color: B.crimson }}>
+                        <div
+                          style={{
+                            marginTop: 12,
+                            fontSize: 13,
+                            fontWeight: 900,
+                            color: B.crimson,
+                            fontFamily: BODY,
+                          }}
+                        >
                           ✅ مُحدَّدة
                         </div>
                       )}
@@ -236,15 +246,13 @@ export default function PlanPicker() {
                 })}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub }}>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub, fontFamily: BODY }}>
                 لا توجد باقات متاحة حالياً — جرّب تبويب "مواد مستقلة".
               </div>
-            )
-          )}
+            ))}
 
-          {/* قائمة المواد المستقلة */}
-          {tab === 'subject' && (
-            hasSubjects ? (
+          {tab === 'subject' &&
+            (hasSubjects ? (
               <div
                 style={{
                   display: 'grid',
@@ -255,39 +263,44 @@ export default function PlanPicker() {
               >
                 {subjects.map(subj => {
                   const active = selectedType === 'subject' && selectedId === subj.id
+
                   return (
                     <button
                       key={subj.id}
+                      type="button"
+                      aria-pressed={active}
+                      title={`اختيار المادة: ${subj.name}`}
                       onClick={() => selectPlan('subject', subj.id)}
-                      style={{
-                        textAlign: 'right',
-                        padding: 20,
-                        borderRadius: 20,
-                        border: `2px solid ${active ? B.crimson : B.border}`,
-                        background: active ? 'rgba(150,30,45,0.06)' : B.card,
-                        boxShadow: active ? `0 10px 28px rgba(150,30,45,0.16)` : B.shadow,
-                        cursor: 'pointer',
-                        fontFamily: CAIRO,
-                        transition: 'all 0.2s',
-                      }}
+                      style={selectableCardStyle(active)}
                     >
                       <div style={{ fontSize: 28, marginBottom: 10 }}>{subj.icon || '📚'}</div>
+
                       <div
                         style={{
                           fontSize: 16,
                           fontWeight: 900,
-                          fontFamily: CALIBRI,
+                          fontFamily: HEADING,
                           color: B.text,
                           marginBottom: 6,
                         }}
                       >
                         {subj.name}
                       </div>
-                      <div style={{ fontSize: 13, color: B.sub }}>
+
+                      <div style={{ fontSize: 13, color: B.sub, fontFamily: BODY }}>
                         {describeScope(subj.stage, subj.grade, subj.track) || 'مادة مستقلة'}
                       </div>
+
                       {active && (
-                        <div style={{ marginTop: 12, fontSize: 13, fontWeight: 900, color: B.crimson }}>
+                        <div
+                          style={{
+                            marginTop: 12,
+                            fontSize: 13,
+                            fontWeight: 900,
+                            color: B.crimson,
+                            fontFamily: BODY,
+                          }}
+                        >
                           ✅ مُحدَّدة
                         </div>
                       )}
@@ -296,33 +309,22 @@ export default function PlanPicker() {
                 })}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub }}>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub, fontFamily: BODY }}>
                 لا توجد مواد مستقلة متاحة حالياً — جرّب تبويب "الباقات".
               </div>
-            )
-          )}
+            ))}
 
-          {/* زر الانتقال للتسجيل */}
           <div style={{ textAlign: 'center' }}>
-            <button
+            <Button
+              type="button"
+              variant={selectedId ? 'primary' : 'secondary'}
+              size="lg"
+              title="التسجيل"
               onClick={goToRegister}
               disabled={!selectedId}
-              style={{
-                padding: '15px 38px',
-                borderRadius: 14,
-                border: 'none',
-                background: selectedId ? B.gradBlue : B.border,
-                color: selectedId ? '#fff' : B.muted,
-                fontWeight: 900,
-                fontSize: 16,
-                cursor: selectedId ? 'pointer' : 'not-allowed',
-                fontFamily: CAIRO,
-                boxShadow: selectedId ? B.shadowBlue : 'none',
-                transition: 'all 0.2s',
-              }}
             >
               {selectedId ? 'التسجيل بهذا الاختيار ←' : 'اختر باقة أو مادة أولاً'}
-            </button>
+            </Button>
           </div>
         </>
       )}

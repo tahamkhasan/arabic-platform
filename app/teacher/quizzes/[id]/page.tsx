@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
 import { supabase } from '@/lib/supabase'
 
-interface User { id: string; name: string; role: string; user_type: string; status?: string; theme_color?: string }
+interface User { id: string; name: string; role: string; user_type: string; status?: string }
 
 interface QuestionOption { id: string; text: string; is_correct?: boolean }
 interface Question {
@@ -34,7 +35,7 @@ interface ResultRow {
   status: 'submitted' | 'in_progress'
 }
 
-// ── جديد: تفاصيل محاولة طالب واحدة، لمودال المراجعة/التصحيح ──────
+// ── تفاصيل محاولة طالب واحدة، لمودال المراجعة/التصحيح ──────
 interface AttemptEvaluation {
   is_correct?: boolean
   score?: number
@@ -70,7 +71,8 @@ export default function QuizDetailPage() {
 
   const [user, setUser] = useState<User | null>(null)
   const [accessToken, setAccessToken] = useState('')
-  const [themeColor, setThemeColor] = useState<string>(BRAND.red)
+  // ── مُعدَّل: themeColor ثابت دائماً (BRAND.deep) — لا useState، لا اختيار شخصي ──
+  const themeColor = BRAND.deep
 
   const [quiz, setQuiz] = useState<QuizDetail | null>(null)
   const [results, setResults] = useState<ResultRow[]>([])
@@ -79,7 +81,7 @@ export default function QuizDetailPage() {
   const [loadError, setLoadError] = useState('')
   const [view, setView] = useState<'questions' | 'results'>('results')
 
-  // ── جديد: مودال مراجعة/تصحيح محاولة طالب ──────────────────────
+  // ── مودال مراجعة/تصحيح محاولة طالب ──────────────────────
   const [openAttemptId, setOpenAttemptId] = useState<string | null>(null)
   const [attemptDetail, setAttemptDetail] = useState<AttemptDetail | null>(null)
   const [attemptLoading, setAttemptLoading] = useState(false)
@@ -95,7 +97,7 @@ export default function QuizDetailPage() {
       if (u.user_type === 'student') { router.replace('/student'); return }
       if (u.status === 'pending' || u.status === 'suspended') { router.replace('/pending-approval'); return }
       setUser(u)
-      if (u.theme_color) setThemeColor(u.theme_color)
+      // ── مُزال: لا نقرأ theme_color بعد الآن، اللون ثابت دائماً ──
     } catch { router.replace('/') }
   }, [router])
 
@@ -143,7 +145,7 @@ export default function QuizDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, quizId])
 
-  // ── جديد: فتح مودال مراجعة محاولة ─────────────────────────────
+  // ── فتح مودال مراجعة محاولة ─────────────────────────────
   function openAttempt(attemptId: string) {
     if (!accessToken) return
     setOpenAttemptId(attemptId)
@@ -174,7 +176,7 @@ export default function QuizDetailPage() {
       .finally(() => setAttemptLoading(false))
   }
 
-  // ── جديد: حفظ تصحيح سؤال مقالي ────────────────────────────────
+  // ── حفظ تصحيح سؤال مقالي ────────────────────────────────
   async function saveGrade(questionId: string, maxPoints: number) {
     if (!accessToken || !openAttemptId) return
     const draft = gradeDrafts[questionId]
@@ -219,7 +221,7 @@ export default function QuizDetailPage() {
     inputBg: 'rgba(140,20,40,0.04)',
   }
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle: CSSProperties = {
     width: '100%', padding: '10px 12px', borderRadius: 10,
     border: `1.5px solid ${T.border}`, background: T.inputBg, color: T.text,
     fontSize: 13, fontFamily: 'inherit',
@@ -234,7 +236,7 @@ export default function QuizDetailPage() {
 
   const pendingReviewCount = attemptDetail?.questions.filter(q => q.evaluation?.needs_ai_review).length ?? 0
 
-  // ── جديد: ترجمة معرّف الخيار (UUID) إلى نصّه المقروء — لأسئلة
+  // ── ترجمة معرّف الخيار (UUID) إلى نصّه المقروء — لأسئلة
   // multiple_choice، إجابة الطالب والإجابة الصحيحة كلاهما مخزَّنان
   // بصيغة id الخيار، لا نصّه. بدون هذا تظهر UUID خاماً في الواجهة. ──
   function resolveAnswerText(q: AttemptQuestionItem, raw: string | string[] | null | undefined): string {
@@ -252,7 +254,7 @@ export default function QuizDetailPage() {
   return (
     <div dir="rtl" style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: BRAND.fontBody, paddingBottom: 60 }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(247,242,234,0.97)', backdropFilter: 'blur(20px)', borderBottom: `1px solid ${T.border}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={() => router.push('/teacher/quizzes')} style={{ padding: '10px 16px', borderRadius: 12, border: 'none', background: themeColor, color: '#1a1a2e', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>→ رجوع</button>
+        <button onClick={() => router.push('/teacher/quizzes')} style={{ padding: '10px 16px', borderRadius: 12, border: 'none', background: themeColor, color: '#fff', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>→ رجوع</button>
         <h1 style={{ fontSize: 16, fontWeight: 900, color: themeColor, background: `${themeColor}16`, padding: '4px 12px', borderRadius: 8, margin: 0, fontFamily: BRAND.fontHeading }}>
           {quiz?.title ? `🎯 ${quiz.title}` : 'تفاصيل الاختبار'}
         </h1>
@@ -364,7 +366,7 @@ export default function QuizDetailPage() {
         )}
       </main>
 
-      {/* ══ جديد: مودال مراجعة وتصحيح محاولة طالب ══════════════════ */}
+      {/* ══ مودال مراجعة وتصحيح محاولة طالب ══════════════════ */}
       {openAttemptId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setOpenAttemptId(null) }}>

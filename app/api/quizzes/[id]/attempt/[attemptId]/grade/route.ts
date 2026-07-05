@@ -53,7 +53,8 @@ export async function PATCH(
       .from('quizzes')
       .select('id, teacher_id')
       .eq('id', quizId)
-      .single()
+.is('deleted_at', null)
+.single()
 
     if (quizError || !quiz) {
       return NextResponse.json({ error: 'الاختبار غير موجود' }, { status: 404 })

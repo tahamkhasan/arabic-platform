@@ -1,16 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useRouteGuard } from '@/hooks/useRouteGuard'
 import { BRAND } from '@/lib/constants/theme'
-
-interface User {
-  id: string
-  name?: string
-  email?: string
-  status?: string
-  user_type?: string
-}
 
 const T = {
   bg: BRAND.bg,
@@ -24,46 +18,41 @@ const T = {
 
 export default function PendingApprovalPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const { loading, authorized, user } = useRouteGuard('pending-only')
 
   useEffect(() => {
-    const saved = localStorage.getItem('mosaed_user')
-    if (!saved) {
-      router.replace('/')
-      return
-    }
-    try {
-      const u = JSON.parse(saved) as User
-      // ── إذا أصبح الحساب فعّالاً فعلياً (موافَق عليه)، لا معنى
-      // لإبقائه في صفحة الانتظار — يُعاد توجيهه لمساره الصحيح فوراً.
-      if (u.status === 'approved') {
-        router.replace(u.user_type === 'student' ? '/student' : '/dashboard')
-        return
-      }
-      setUser(u)
-    } catch {
-      router.replace('/')
-    }
-  }, [router])
+    if (loading || !authorized || !user) return
+
+    const intervalId = window.setInterval(() => {
+      window.location.reload()
+    }, 60000)
+
+    return () => window.clearInterval(intervalId)
+  }, [loading, authorized, user])
 
   function handleLogout() {
     localStorage.removeItem('mosaed_user')
     localStorage.removeItem('mosaed_session')
-    router.replace('/')
+    router.replace('/login')
   }
 
-  // ── تحديث دوري بسيط: يتحقّق من حالة الحساب كل دقيقة عبر إعادة
-  // تحميل الصفحة، بلا اعتماد على API مخصّص لم نتأكد من وجوده ──
-  useEffect(() => {
-    const iv = setInterval(() => {
-      window.location.reload()
-    }, 60000)
-    return () => clearInterval(iv)
-  }, [])
+  if (loading) return null
+  if (!authorized || !user) return null
 
-  if (!user) return null
+  const displayName =
+    (user as any)?.fullname ??
+    (user as any)?.name ??
+    user.email ??
+    'المستخدم'
 
   const isSuspended = user.status === 'suspended'
+
+  const title = isSuspended ? 'حسابك معلّق حالياً' : 'حسابك بانتظار الموافقة'
+  const message = isSuspended
+    ? 'تم تعليق هذا الحساب من قبل إدارة المنصة. يرجى التواصل مع الإدارة لمعرفة السبب وآلية إعادة التفعيل.'
+    : 'لم تتم الموافقة على حسابك بعد. بعد اعتماد الحساب من المدير، سيتم نقلك تلقائياً إلى واجهتك داخل المنصة.'
+  const badgeText = isSuspended ? 'الحالة: موقوف' : 'الحالة: قيد المراجعة'
+  const icon = isSuspended ? '🔒' : '⏳'
 
   return (
     <div
@@ -81,7 +70,7 @@ export default function PendingApprovalPage() {
       <div
         style={{
           width: '100%',
-          maxWidth: 460,
+          maxWidth: 480,
           background: T.cardBg,
           borderRadius: 24,
           border: `1px solid ${T.border}`,
@@ -90,33 +79,84 @@ export default function PendingApprovalPage() {
           textAlign: 'center',
         }}
       >
-        <div style={{ fontSize: 56, marginBottom: 18 }}>{isSuspended ? '🔒' : '⏳'}</div>
+        <div style={{ fontSize: 56, marginBottom: 18 }}>{icon}</div>
+
+        <div
+          style={{
+            display: 'inline-block',
+            marginBottom: 14,
+            padding: '6px 12px',
+            borderRadius: 999,
+            background: isSuspended ? 'rgba(180,40,40,0.10)' : 'rgba(217,119,6,0.12)',
+            color: isSuspended ? '#9f1239' : '#b45309',
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          {badgeText}
+        </div>
 
         <h1
           style={{
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: 900,
             color: T.text,
             marginBottom: 12,
             fontFamily: BRAND.fontHeading,
           }}
         >
-          {isSuspended ? 'حسابك معلَّق حالياً' : 'حسابك بانتظار الموافقة'}
+          {title}
         </h1>
 
-        <p style={{ fontSize: 14, color: T.sub, lineHeight: 1.9, marginBottom: 8 }}>
-          {isSuspended
-            ? 'تم تعليق هذا الحساب من قِبل إدارة المنصة. تواصل مع إدارة المنصة لمزيد من التفاصيل.'
-            : 'لم يوافق المدير على حسابك بعد. بمجرد الموافقة، ستتمكن من الوصول إلى المنصة بالكامل تلقائياً.'}
+        <p
+          style={{
+            fontSize: 14,
+            color: T.sub,
+            lineHeight: 1.9,
+            marginBottom: 12,
+          }}
+        >
+          {message}
         </p>
 
-        {user.email && (
-          <p style={{ fontSize: 13, color: T.sub, marginBottom: 28, direction: 'ltr', display: 'inline-block' }}>
+        <div
+          style={{
+            marginBottom: 10,
+            fontSize: 13,
+            fontWeight: 800,
+            color: T.text,
+          }}
+        >
+          {displayName}
+        </div>
+
+        {user.email ? (
+          <p
+            style={{
+              fontSize: 13,
+              color: T.sub,
+              marginBottom: 28,
+              direction: 'ltr',
+              display: 'inline-block',
+            }}
+          >
             {user.email}
           </p>
-        )}
+        ) : null}
+
+        <p
+          style={{
+            fontSize: 12,
+            color: T.sub,
+            marginBottom: 24,
+            lineHeight: 1.8,
+          }}
+        >
+          يتم تحديث الحالة تلقائياً كل دقيقة.
+        </p>
 
         <button
+          type="button"
           onClick={handleLogout}
           style={{
             width: '100%',

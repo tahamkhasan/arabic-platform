@@ -1,80 +1,116 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// userId قد يصل كسلسلة حرفية "undefined"/"null" (لا قيمة null فعلية) من واجهات
-// لم تُمرِّر الخاصية بعد — هذا الفحص يصطاد تلك الحالة، بخلاف !userId وحدها
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function isValidUserId(userId: string | null): userId is string {
   return !!userId && userId !== 'undefined' && userId !== 'null' && UUID_RE.test(userId)
 }
 
-// GET /api/notifications?userId=xxx
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'خطأ غير معروف'
+}
+
+function ok(data: unknown, status = 200) {
+  return NextResponse.json(data, { status })
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const userId     = searchParams.get('userId')
+    const userId = searchParams.get('userId')
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
     if (!isValidUserId(userId)) {
-      return NextResponse.json({ notifications: [], unread: 0 })
+      return unreadOnly ? ok({ unread: 0 }) : ok({ notifications: [], unread: 0 })
     }
 
-    // عدد غير المقروءة
-    const { count } = await supabaseAdmin
+    const { count, error: countError } = await supabaseAdmin
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('is_read', false)
 
-    if (unreadOnly) return NextResponse.json({ unread: count ?? 0 })
+    if (countError) {
+      console.error('notifications.GET.countError', countError)
+      return unreadOnly ? ok({ unread: 0 }) : ok({ notifications: [], unread: 0 })
+    }
 
-    let query = supabaseAdmin
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(30)
-
-    const { data, error } = await query
-    if (error) throw error
-
-    return NextResponse.json({ notifications: data ?? [], unread: count ?? 0 })
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'خطأ غير معروف'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
-}
-
-// POST /api/notifications — إنشاء إشعار
-export async function POST(req: NextRequest) {
-  try {
-    const { userId, type, title, body, link } = await req.json()
-
-    if (!isValidUserId(userId) || !type || !title) {
-      return NextResponse.json({ error: 'بيانات ناقصة أو userId غير صالح' }, { status: 400 })
+    if (unreadOnly) {
+      return ok({ unread: count ?? 0 })
     }
 
     const { data, error } = await supabaseAdmin
       .from('notifications')
-      .insert({ user_id: userId, type, title, body: body ?? null, link: link ?? null })
-      .select()
-      .single()
+      .select('id, user_id, type, title, body, link, is_read, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(30)
 
-    if (error) throw error
-    return NextResponse.json({ notification: data })
+    if (error) {
+      console.error('notifications.GET.listError', error)
+      return ok({ notifications: [], unread: count ?? 0 })
+    }
+
+    return ok({
+      notifications: data ?? [],
+      unread: count ?? 0,
+    })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'خطأ غير معروف'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('notifications.GET.fatal', error)
+    return ok({ notifications: [], unread: 0 })
   }
 }
 
-// PATCH /api/notifications — تعليم كمقروء
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+
+    const userId = typeof body?.userId === 'string' ? body.userId.trim() : null
+    const type = typeof body?.type === 'string' ? body.type.trim() : ''
+    const title = typeof body?.title === 'string' ? body.title.trim() : ''
+    const messageBody = typeof body?.body === 'string' ? body.body.trim() : null
+    const link = typeof body?.link === 'string' ? body.link.trim() : null
+
+    if (!isValidUserId(userId) || !type || !title) {
+      return ok({ error: 'بيانات ناقصة أو userId غير صالح' }, 400)
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        type,
+        title,
+        body: messageBody || null,
+        link: link || null,
+        is_read: false,
+      })
+      .select('id, user_id, type, title, body, link, is_read, created_at')
+      .single()
+
+    if (error) {
+      console.error('notifications.POST.error', error)
+      throw error
+    }
+
+    return ok({ notification: data })
+  } catch (error: unknown) {
+    return ok({ error: getErrorMessage(error) }, 500)
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId, notificationId } = await req.json()
+    const body = await req.json()
+
+    const userId = typeof body?.userId === 'string' ? body.userId.trim() : null
+    const notificationId =
+      typeof body?.notificationId === 'string' ? body.notificationId.trim() : null
 
     if (!isValidUserId(userId)) {
-      return NextResponse.json({ error: 'userId مطلوب وصالح' }, { status: 400 })
+      return ok({ error: 'userId مطلوب وصالح' }, 400)
     }
 
     let query = supabaseAdmin
@@ -82,14 +118,19 @@ export async function PATCH(req: NextRequest) {
       .update({ is_read: true })
       .eq('user_id', userId)
 
-    // إذا حدد إشعاراً معيناً — وإلا علّم الكل
-    if (notificationId) query = query.eq('id', notificationId)
+    if (notificationId) {
+      query = query.eq('id', notificationId)
+    }
 
     const { error } = await query
-    if (error) throw error
-    return NextResponse.json({ success: true })
+
+    if (error) {
+      console.error('notifications.PATCH.error', error)
+      throw error
+    }
+
+    return ok({ success: true })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'خطأ غير معروف'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return ok({ error: getErrorMessage(error) }, 500)
   }
 }

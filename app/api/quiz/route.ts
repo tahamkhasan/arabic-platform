@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { extractLessonFileText } from '@/lib/ai/extractLessonText'
 
 interface Question {
   id:          number
@@ -16,26 +18,53 @@ interface QuizData {
 
 export async function POST(req: NextRequest) {
   try {
-    const { lessonName, material, grade, count = 8 } = await req.json()
+    const { lessonId, lessonName, material, grade, count = 8 } = await req.json()
 
     if (!lessonName) {
       return NextResponse.json({ error: 'اسم الدرس مطلوب' }, { status: 400 })
+    }
+
+    // ── جديد: إن لم تصل مادة نصية (شائع الآن لدروس اللغة العربية،
+    // التي تخزّن محتواها في ملف "فهم واستيعاب" المرفوع بدل حقل
+    // content القديم)، نجلب الدرس من قاعدة البيانات ونستخرج نص
+    // ملف الفهم والاستيعاب تلقائياً ليكون المادة المرجعية الفعلية.
+    // بدون هذا، يولّد الذكاء الاصطناعي أسئلة من معرفته العامة عن
+    // الموضوع كاملاً بدل الالتزام بالجزء المقرر فقط. ─────────────
+    let finalMaterial = typeof material === 'string' ? material.trim() : ''
+
+    if (!finalMaterial && lessonId) {
+      const { data: lessonRow } = await supabaseAdmin
+        .from('lessons')
+        .select('comprehension_file_url, content')
+        .eq('id', lessonId)
+        .maybeSingle()
+
+      if (lessonRow?.comprehension_file_url) {
+        const extracted = await extractLessonFileText(lessonRow.comprehension_file_url)
+        if (extracted && !extracted.startsWith('[')) {
+          finalMaterial = extracted
+        }
+      }
+      if (!finalMaterial && lessonRow?.content) {
+        finalMaterial = String(lessonRow.content).trim()
+      }
     }
 
     const systemPrompt = `أنت أستاذ لغة عربية متخصص تصمم اختبارات تفاعلية.
 يجب أن ترد بـ JSON فقط — لا نص قبله ولا بعده ولا backticks.
 
 صمّم اختباراً من ${count} أسئلة للصف ${grade || ''} حول: "${lessonName}"
-${material ? `\n══ المادة العلمية المرجعية (الأولوية القصوى) ══\n${material.slice(0, 2000)}\n══════════════════════════════════\n` : ''}
+${finalMaterial ? `\n══ المادة العلمية المرجعية (الأولوية القصوى) ══\n${finalMaterial.slice(0, 6000)}\n══════════════════════════════════\n` : ''}
 
 ⚠️ قواعد صارمة:
-1. التعريفات تُؤخذ حرفياً من المادة العلمية المرفقة فقط
-2. لا تستخدم معرفتك العامة — المادة المرفقة هي المصدر الوحيد
-3. إذا لم تجد معلومة في المادة — لا تخترعها
-4. التعريفات دقيقة علمياً كما وردت في المادة
-5. الأسئلة بالعربية الفصحى السليمة
-6. تنوع في الأنواع: multiple، truefalse، fill
-7. الأسئلة مرتبة من السهل للصعب
+1. التزم حصراً بالجزء المقرر الوارد في "المادة العلمية المرجعية" أعلاه — لا تتجاوزه إلى أي محتوى آخر (مثلاً: إن كانت المادة آيات محددة من سورة، لا تسأل عن آيات أخرى من نفس السورة غير واردة في المادة).
+2. التعريفات والأمثلة تُؤخذ حرفياً من المادة العلمية المرفقة فقط
+3. لا تستخدم معرفتك العامة لتوسيع نطاق المحتوى — المادة المرفقة هي المصدر الوحيد والحدود القصوى
+4. إذا لم تجد معلومة في المادة — لا تخترعها، ولا تستعض عنها بمعرفة عامة عن الموضوع
+5. التعريفات دقيقة علمياً كما وردت في المادة
+6. الأسئلة بالعربية الفصحى السليمة
+7. تنوع في الأنواع: multiple، truefalse، fill
+8. الأسئلة مرتبة من السهل للصعب
 
 أعد JSON بهذا الشكل بالضبط:
 {

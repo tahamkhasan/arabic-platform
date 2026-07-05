@@ -156,7 +156,9 @@ export default function LessonQuizManager({ lesson, onClose }: Props) {
                   textAlign: 'center',
                   fontSize: 14,
                   fontWeight: BRAND.weightBold,
-                  color: message.startsWith('❌') ? BRAND.crimson : BRAND.gold,
+                  // ── مُعدَّل: BRAND.gold كان منخفض التباين على الخلفية
+                  // الفاتحة (تشويش بصري). أخضر واضح للنجاح، أحمر للفشل ──
+                  color: message.startsWith('❌') ? BRAND.crimson : '#059669',
                   marginBottom: 14,
                 }}
               >

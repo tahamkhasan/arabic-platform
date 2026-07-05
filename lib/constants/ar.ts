@@ -1,9 +1,9 @@
 export const ar = {
   common: {
-    platformName: 'منصة مساعد اللغة العربية',
-    assistantName: 'مساعد اللغة العربية',
-    footerKuwait: 'منصة مساعد اللغة العربية • الكويت 🇰🇼',
-    footerStages: 'منصة مساعد اللغة العربية • ابتدائي · متوسط · ثانوي',
+    platformName: ' مِداد',
+    assistantName: 'مِداد',
+    footerKuwait: ' مِداد • الكويت 🇰🇼',
+    footerStages: ' مِداد • ابتدائي · متوسط · ثانوي',
     or: 'أو',
     cancel: 'إلغاء',
     logout: 'تسجيل الخروج',
@@ -48,7 +48,7 @@ export const ar = {
       'نحو', 'بلاغة', 'أدب', 'صرف', 'شعر', 'نثر',
       'قراءة', 'كتابة', 'تعبير', 'إملاء', 'خط', 'لغة',
     ],
-    title: 'منصة مساعد اللغة العربية',
+    title: 'منصة مِداد',
     subtitle: 'مدعوم بالذكاء الاصطناعي 🤖',
     emailPlaceholder: 'البريد الإلكتروني',
     passwordPlaceholder: 'كلمة المرور',
@@ -64,7 +64,7 @@ export const ar = {
   },
 
   dashboard: {
-    title: '🌙 مساعد اللغة العربية',
+    title: '🌙 مِداد',
     greeting: (name: string) => `أهلاً ${name} 👋`,
     settings: {
       title: '⚙️ الإعدادات',

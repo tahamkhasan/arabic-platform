@@ -20,9 +20,7 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
   const [editingLesson, setEditingLesson] = useState<LessonItem | null>(null)
   const [form, setForm] = useState<LessonFormState>(emptyLessonForm)
 
-  useEffect(() => {
-    if (unitId) loadLessons()
-  }, [unitId])
+  useEffect(() => { if (unitId) loadLessons() }, [unitId])
 
   async function loadLessons() {
     try {
@@ -40,7 +38,7 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
   const filteredLessons = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return lessons
-    return lessons.filter((l) =>
+    return lessons.filter(l =>
       [l.name, l.description].filter(Boolean).join(' ').toLowerCase().includes(q)
     )
   }, [lessons, search])
@@ -65,19 +63,15 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
   }
 
   function updateForm<K extends keyof LessonFormState>(key: K, value: LessonFormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm(prev => ({ ...prev, [key]: value }))
   }
 
   async function submitLesson() {
     if (!accessToken) return
-    if (!form.name.trim()) {
-      setMsg('اسم الدرس مطلوب.')
-      return
-    }
+    if (!form.name.trim()) { setMsg('اسم الدرس مطلوب.'); return }
 
     try {
-      setSaving(true)
-      setMsg('')
+      setSaving(true); setMsg('')
 
       const fd = new FormData()
       fd.append('unitId', unitId)
@@ -87,40 +81,37 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
       fd.append('order_num', String(form.order_num))
       fd.append('is_active', String(form.is_active))
 
-      if (form.removeVideo) {
-        fd.append('removeVideo', 'true')
-      } else if (form.videoFile) {
-        fd.append('videoFile', form.videoFile)
-      } else if (form.videoLink.trim()) {
-        fd.append('videoLink', form.videoLink.trim())
-      }
+      // الفيديو
+      if (form.removeVideo) fd.append('removeVideo', 'true')
+      else if (form.videoFile) fd.append('videoFile', form.videoFile)
+      else if (form.videoLink.trim()) fd.append('videoLink', form.videoLink.trim())
 
-      for (const file of form.newFiles) {
-        fd.append('files', file)
-      }
+      // الملفات المصاحبة العامة
+      for (const file of form.newFiles) fd.append('files', file)
       fd.append('existingFileUrls', JSON.stringify(form.existingFileUrls))
+
+      // ملفات اللغة العربية — متعددة لكل فرع
+      for (const file of form.newComprehensionFiles) fd.append('comprehensionFiles', file)
+      for (const url  of form.comprehensionFileUrls) fd.append('existingComprehensionUrls', url)
+
+      for (const file of form.newTharwaFiles) fd.append('tharwaFiles', file)
+      for (const url  of form.tharwaFileUrls) fd.append('existingTharwaUrls', url)
+
+      for (const file of form.newBalaghaFiles) fd.append('balaghaFiles', file)
+      for (const url  of form.balaghaFileUrls) fd.append('existingBalaghaUrls', url)
+
+      for (const file of form.newNahwFiles) fd.append('nahwFiles', file)
+      for (const url  of form.nahwFileUrls)  fd.append('existingNahwUrls', url)
 
       const res = await fetch(
         editingLesson ? `/api/lessons/${editingLesson.id}` : '/api/lessons',
-        {
-          method: editingLesson ? 'PATCH' : 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          body: fd,
-        }
+        { method: editingLesson ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: fd }
       )
-
       const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(
-          data?.error || (editingLesson ? 'تعذر تعديل الدرس.' : 'تعذر إنشاء الدرس.')
-        )
-      }
+      if (!res.ok) throw new Error(data?.error || (editingLesson ? 'تعذر تعديل الدرس.' : 'تعذر إنشاء الدرس.'))
 
       await loadLessons()
-      setMsg(
-        editingLesson ? `تم تحديث درس ${form.name} بنجاح.` : `تم إنشاء درس ${form.name} بنجاح.`
-      )
+      setMsg(editingLesson ? `✅ تم تحديث درس ${form.name} بنجاح.` : `✅ تم إنشاء درس ${form.name} بنجاح.`)
       closeModal()
       setTimeout(() => setMsg(''), 2500)
     } catch (error: any) {
@@ -132,26 +123,14 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
 
   async function deleteLesson(lesson: LessonItem) {
     if (!accessToken) return
-    const ok = window.confirm(`هل تريد حذف درس "${lesson.name}"؟`)
-    if (!ok) return
-
+    if (!window.confirm(`هل تريد حذف درس "${lesson.name}"؟`)) return
     try {
-      setDeleting(true)
-      setMsg('')
-
-      const res = await fetch(`/api/lessons/${lesson.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-
+      setDeleting(true); setMsg('')
+      const res = await fetch(`/api/lessons/${lesson.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } })
       const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر حذف الدرس.')
-      }
-
-      setLessons((prev) => prev.filter((l) => l.id !== lesson.id))
-      setMsg(`تم حذف درس ${lesson.name} بنجاح.`)
+      if (!res.ok) throw new Error(data?.error || 'تعذر حذف الدرس.')
+      setLessons(prev => prev.filter(l => l.id !== lesson.id))
+      setMsg(`✅ تم حذف درس ${lesson.name} بنجاح.`)
       setTimeout(() => setMsg(''), 2500)
     } catch (error: any) {
       setMsg(error?.message || 'حدث خطأ أثناء حذف الدرس.')
@@ -160,24 +139,26 @@ export function useLessonsPage({ unitId, accessToken }: UseLessonsPageArgs) {
     }
   }
 
+  async function toggleLessonActive(lesson: LessonItem) {
+    if (!accessToken) return
+    try {
+      const fd = new FormData()
+      fd.append('is_active', String(!lesson.is_active))
+      const res = await fetch(`/api/lessons/${lesson.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}` }, body: fd })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'تعذر تغيير حالة الدرس.')
+      setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, is_active: !lesson.is_active } : l))
+      setMsg(!lesson.is_active ? `✅ تم إظهار درس ${lesson.name}.` : `✅ تم إخفاء درس ${lesson.name}.`)
+      setTimeout(() => setMsg(''), 2000)
+    } catch (error: any) {
+      setMsg(error?.message || 'حدث خطأ أثناء تغيير حالة الدرس.')
+    }
+  }
+
   return {
-    lessons,
-    filteredLessons,
-    loading,
-    saving,
-    deleting,
-    msg,
-    search,
-    modalOpen,
-    editingLesson,
-    form,
-    setSearch,
-    loadLessons,
-    openCreateModal,
-    openEditModal,
-    closeModal,
-    updateForm,
-    submitLesson,
-    deleteLesson,
+    lessons, filteredLessons, loading, saving, deleting, msg, search,
+    modalOpen, editingLesson, form, setSearch, loadLessons,
+    openCreateModal, openEditModal, closeModal, updateForm,
+    submitLesson, deleteLesson, toggleLessonActive,
   }
 }

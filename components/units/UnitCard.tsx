@@ -9,12 +9,14 @@ export default function UnitCard({
   onEdit,
   onDelete,
   onOpenLessons,
+  onToggleActive,
 }: {
   unit: UnitItem
   deleting: boolean
   onEdit: (unit: UnitItem) => void
   onDelete: (unit: UnitItem) => void
   onOpenLessons: (unit: UnitItem) => void
+  onToggleActive: (unit: UnitItem) => void
 }) {
   return (
     <div
@@ -28,6 +30,7 @@ export default function UnitCard({
         justifyContent: 'space-between',
         gap: 14,
         flexWrap: 'wrap',
+        opacity: unit.is_active ? 1 : 0.6,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
@@ -50,8 +53,8 @@ export default function UnitCard({
           <div style={{ fontSize: 15, fontWeight: BRAND.weightBlack, fontFamily: BRAND.fontHeading, color: BRAND.text }}>
             {unit.order_num}. {unit.name}
             {!unit.is_active && (
-              <span style={{ fontSize: 11, color: BRAND.orange, marginRight: 8, fontFamily: BRAND.fontBody, fontWeight: BRAND.weightSemibold }}>
-                (معطّلة)
+              <span style={{ fontSize: 11, color: BRAND.crimson, marginRight: 8, fontFamily: BRAND.fontBody, fontWeight: BRAND.weightSemibold }}>
+                (مخفية)
               </span>
             )}
           </div>
@@ -61,10 +64,26 @@ export default function UnitCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
         <Button variant="primary" size="sm" onClick={() => onOpenLessons(unit)}>
           📝 الدروس
         </Button>
+        <button
+          onClick={() => onToggleActive(unit)}
+          style={{
+            padding: '8px 14px',
+            borderRadius: BRAND.radiusSm,
+            border: `1.5px solid ${unit.is_active ? BRAND.border : BRAND.crimson}`,
+            background: unit.is_active ? 'transparent' : 'rgba(140,20,40,0.10)',
+            color: unit.is_active ? BRAND.sub : BRAND.crimson,
+            fontSize: 13,
+            fontWeight: BRAND.weightBold,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          {unit.is_active ? '🙈 إخفاء' : '👁️ إظهار'}
+        </button>
         <Button variant="secondary" size="sm" onClick={() => onEdit(unit)}>
           ✏️ تعديل
         </Button>

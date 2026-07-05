@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServiceClient, requireAdmin } from '@/lib/server/auth'
+import { getServiceClient, requireAdmin, requireAdminOrPermission } from '@/lib/server/auth'
 
 type AssignRoleBody = {
   userId?: string
@@ -173,8 +173,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await requireAdmin(req)
-  if (!auth.ok) return auth.response
+  const auth = await requireAdminOrPermission(req, 'assign_roles')
+if (!auth.ok) return auth.response
 
   try {
     const body = (await req.json()) as AssignRoleBody

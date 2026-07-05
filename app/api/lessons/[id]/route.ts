@@ -45,8 +45,10 @@ async function uploadFile(supabase: any, file: File, prefix: string): Promise<st
 }
 
 // ══════════════════════════════════════════════════════════════
-// PATCH — تعديل درس (FormData — يدعم استبدال/حذف الفيديو وإضافة
-// أو إزالة ملفات مصاحبة فردية)
+// PATCH — تعديل درس (FormData — يدعم استبدال/حذف الفيديو، إضافة
+// أو إزالة ملفات مصاحبة فردية، وكذلك الملفات الأربعة المتخصصة
+// للغة العربية: فهم/ثروة/بلاغة/نحو — كل واحد يُستبدَل أو يُزال
+// بشكل مستقل عبر علم remove<X>File
 // ══════════════════════════════════════════════════════════════
 export async function PATCH(req: NextRequest, context: Context) {
   const auth = await requireAdmin(req)
@@ -66,6 +68,16 @@ export async function PATCH(req: NextRequest, context: Context) {
     const removeVideo     = getStr(formData, 'removeVideo') === 'true'
     const existingFileUrlsRaw = getStr(formData, 'existingFileUrls')
     const files                  = formData.getAll('files').filter((f) => f instanceof File && f.size > 0) as File[]
+
+    // ── الملفات الأربعة المتخصصة ──────────────────────────────
+    const comprehensionFile = getFile(formData, 'comprehensionFile')
+    const removeComprehensionFile = getStr(formData, 'removeComprehensionFile') === 'true'
+    const tharwaFile = getFile(formData, 'tharwaFile')
+    const removeTharwaFile = getStr(formData, 'removeTharwaFile') === 'true'
+    const balaghaFile = getFile(formData, 'balaghaFile')
+    const removeBalaghaFile = getStr(formData, 'removeBalaghaFile') === 'true'
+    const nahwFile = getFile(formData, 'nahwFile')
+    const removeNahwFile = getStr(formData, 'removeNahwFile') === 'true'
 
     const supabase = getServiceClient()
 
@@ -108,6 +120,42 @@ export async function PATCH(req: NextRequest, context: Context) {
       updates.file_urls = [...existing, ...newUrls]
     }
 
+    // ── فهم واستيعاب: إزالة، أو استبدال ─────────────────────
+    if (removeComprehensionFile) {
+      updates.comprehension_file_url = null
+      updates.comprehension_file_name = null
+    } else if (comprehensionFile) {
+      updates.comprehension_file_url = await uploadFile(supabase, comprehensionFile, 'comprehension')
+      updates.comprehension_file_name = comprehensionFile.name
+    }
+
+    // ── ثروة لغوية: إزالة، أو استبدال ───────────────────────
+    if (removeTharwaFile) {
+      updates.tharwa_file_url = null
+      updates.tharwa_file_name = null
+    } else if (tharwaFile) {
+      updates.tharwa_file_url = await uploadFile(supabase, tharwaFile, 'tharwa')
+      updates.tharwa_file_name = tharwaFile.name
+    }
+
+    // ── بلاغة: إزالة، أو استبدال ─────────────────────────────
+    if (removeBalaghaFile) {
+      updates.balagha_file_url = null
+      updates.balagha_file_name = null
+    } else if (balaghaFile) {
+      updates.balagha_file_url = await uploadFile(supabase, balaghaFile, 'balagha')
+      updates.balagha_file_name = balaghaFile.name
+    }
+
+    // ── نحو: إزالة، أو استبدال ───────────────────────────────
+    if (removeNahwFile) {
+      updates.nahw_file_url = null
+      updates.nahw_file_name = null
+    } else if (nahwFile) {
+      updates.nahw_file_url = await uploadFile(supabase, nahwFile, 'nahw')
+      updates.nahw_file_name = nahwFile.name
+    }
+
     const { data, error } = await supabase
       .from('lessons')
       .update(updates)
@@ -133,8 +181,6 @@ export async function PATCH(req: NextRequest, context: Context) {
 
 // ══════════════════════════════════════════════════════════════
 // DELETE — حذف درس
-// (لا فحص سلامة مرجعية مانع — حذف الدرس يُسقط تلقائياً اختباره
-//  وتعليقاته وملاحظاته عبر CASCADE، وهذا سلوك مقصود لمحتوى الدروس)
 // ══════════════════════════════════════════════════════════════
 export async function DELETE(req: NextRequest, context: Context) {
   const auth = await requireAdmin(req)

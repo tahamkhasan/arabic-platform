@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { BRAND } from '@/lib/constants/theme'
 import Button from '@/components/ui/Button'
 import { STAGE_LABELS, GRADES_BY_STAGE, TRACK_LABELS, StageKey, TrackKey } from '@/lib/constants/stages'
@@ -15,6 +16,7 @@ export default function PackageCard({
   onEdit: (pkg: PackageItem) => void
   onDelete: (pkg: PackageItem) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const gradeLabel =
     GRADES_BY_STAGE[pkg.stage as StageKey]?.find((g) => g.id === pkg.grade)?.label ?? `الصف ${pkg.grade}`
 
@@ -101,9 +103,66 @@ export default function PackageCard({
         <p style={{ fontSize: 12, color: BRAND.sub, marginBottom: 10, lineHeight: 1.6 }}>{pkg.description}</p>
       ) : null}
 
-      <div style={{ fontSize: 12, color: BRAND.gold, fontWeight: BRAND.weightBold, marginBottom: 14 }}>
-        📚 {pkg.subjects.length} مادة (محسوبة تلقائياً من مواد هذا الصف/التشعيب)
-      </div>
+      {/* ── مُعدَّل: BRAND.gold كان منخفض التباين (تشويش بصري)، وأصبح
+           قابلاً للضغط لعرض/إخفاء قائمة المواد الفعلية بالباقة ── */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: 12,
+          color: BRAND.crimson,
+          fontWeight: BRAND.weightBold,
+          marginBottom: expanded ? 8 : 14,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        <span>📚 {pkg.subjects.length} مادة (محسوبة تلقائياً من مواد هذا الصف/التشعيب)</span>
+        <span style={{ fontSize: 11 }}>{expanded ? '🔼 إخفاء' : '🔽 عرض'}</span>
+      </button>
+
+      {expanded ? (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 10,
+            borderRadius: BRAND.radiusSm,
+            background: 'rgba(140,20,40,0.04)',
+            border: `1px solid ${BRAND.border}`,
+            display: 'grid',
+            gap: 6,
+          }}
+        >
+          {pkg.subjects.length === 0 ? (
+            <span style={{ fontSize: 12, color: BRAND.sub }}>
+              لا توجد مواد مطابقة لهذا الصف/التشعيب بعد.
+            </span>
+          ) : (
+            pkg.subjects.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  color: BRAND.text,
+                  fontWeight: BRAND.weightSemibold,
+                }}
+              >
+                <span>{s.icon || '📚'}</span>
+                <span>{s.name}</span>
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
 
       <div style={{ display: 'flex', gap: 8 }}>
         <Button variant="secondary" size="sm" fullWidth onClick={() => onEdit(pkg)}>

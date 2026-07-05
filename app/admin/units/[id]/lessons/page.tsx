@@ -16,6 +16,8 @@ function AdminUnitLessonsContent() {
 
   const unitId = params.id
   const unitName = searchParams.get('unitName') || 'الوحدة'
+  const subjectName = searchParams.get('subjectName') || ''
+  const isArabic = subjectName.includes('اللغة العربية')
 
   const { ready, accessToken, guardError } = useAdminGuard()
 
@@ -38,6 +40,7 @@ function AdminUnitLessonsContent() {
     updateForm,
     submitLesson,
     deleteLesson,
+    toggleLessonActive,
   } = useLessonsPage({ unitId, accessToken })
 
   if (guardError) {
@@ -81,6 +84,7 @@ function AdminUnitLessonsContent() {
   return (
     <LessonsPageView
       unitName={unitName}
+      isArabic={isArabic}
       lessons={lessons}
       filteredLessons={filteredLessons}
       loading={loading}
@@ -96,6 +100,7 @@ function AdminUnitLessonsContent() {
       onCreate={openCreateModal}
       onEdit={openEditModal}
       onDelete={deleteLesson}
+      onToggleActive={toggleLessonActive}
       onCloseModal={closeModal}
       onSubmit={submitLesson}
       onSearchChange={setSearch}

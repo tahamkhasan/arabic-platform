@@ -72,6 +72,36 @@ export default function UnitFormModal({
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
+          {/* ── الفصل الدراسي — ثابت بين خيارين فقط ── */}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: BRAND.sub, display: 'block', marginBottom: 6 }}>
+              الفصل الدراسي *
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([[1, 'الفصل الأول'], [2, 'الفصل الثاني']] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => onChange('semester', val)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: BRAND.radiusSm,
+                    border: `1.5px solid ${form.semester === val ? BRAND.crimson : BRAND.border}`,
+                    background: form.semester === val ? 'rgba(140,20,40,0.08)' : 'transparent',
+                    color: form.semester === val ? BRAND.crimson : BRAND.sub,
+                    fontWeight: BRAND.weightBold,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px', gap: 10 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: BRAND.sub, display: 'block', marginBottom: 6 }}>
@@ -128,7 +158,7 @@ export default function UnitFormModal({
               checked={form.is_active}
               onChange={(e) => onChange('is_active', e.target.checked)}
             />
-            الوحدة نشطة
+            الوحدة نشطة (ظاهرة للطلاب إن كان فصلها مفعَّلاً)
           </label>
         </div>
 

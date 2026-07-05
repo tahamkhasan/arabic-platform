@@ -1,0 +1,72 @@
+-- ============================================================================
+-- ميزة جديدة: نطاقات تدريس المعلمين (teacher_scopes)
+-- ============================================================================
+-- الأدمن يُخصِّص للمعلم نطاق تدريس (مرحلة + صف + تشعيب إن لزم)، بلا تحديد
+-- طلاب بأسمائهم. المعلم تلقائياً "يرى" كل طالب مسجَّل بنفس
+-- (stage, grade, track) كطالب ضمن نطاقه — بدون أي ربط يدوي.
+--
+-- معلم واحد قد يملك عدة نطاقات (مثال: متوسط صف 9 + ثانوي صف 12 علمي معاً) —
+-- لذا هذا جدول سطور متعددة لكل معلم، لا عمود واحد على users.
+--
+-- نظام group_members الحالي (تقسيم فرعي اختياري لمجموعات داخل النطاق،
+-- مثل "ضعيف"/"متوسط"/"متفوق") يبقى كما هو تماماً، بلا أي تعديل — هذا
+-- الجدول طبقة منفصلة كلياً تسبقه منطقياً (يحدد من هم طلاب المعلم أولاً،
+-- ثم المعلم اختياريًا يُقسِّمهم لمجموعات فرعية بعد دراسة مستواهم).
+-- ============================================================================
+
+create table if not exists teacher_scopes (
+  id uuid primary key default gen_random_uuid(),
+  teacher_id uuid not null references users(id) on delete cascade,
+
+  stage text not null check (stage in ('primary', 'middle', 'secondary')),
+  grade text not null, -- '1'..'12' كنص، يطابق GRADES_BY_STAGE في lib/constants/stages.ts
+
+  -- التشعيب مطلوب فقط للصفين 11 و12 (نفس قاعدة needsTrack في app/admin/page.tsx)
+  -- null لباقي الصفوف، أو لو الأدمن اختار "كلا التشعيبين" (يُمثَّل بصفّين منفصلين فعلياً)
+  track text check (track in ('scientific', 'literary') or track is null),
+
+  -- نفس مادة المعلم (إن رغب الأدمن بتحديد مادة بعينها لهذا النطاق،
+  -- اختياري — null يعني "كل المواد المخصَّصة لهذا المعلم عبر teacher_subjects")
+  subject_id uuid references subjects(id) on delete set null,
+
+  assigned_by uuid references users(id) on delete set null, -- الأدمن الذي خصّص هذا النطاق
+  created_at timestamptz not null default now(),
+
+  -- منع تكرار النطاق نفسه حرفياً لنفس المعلم (نفس stage+grade+track+subject)
+  unique (teacher_id, stage, grade, track, subject_id)
+);
+
+create index if not exists idx_teacher_scopes_teacher
+  on teacher_scopes(teacher_id);
+
+create index if not exists idx_teacher_scopes_lookup
+  on teacher_scopes(stage, grade, track);
+
+comment on table teacher_scopes is
+  'نطاقات تدريس يخصّصها الأدمن لكل معلم (مرحلة+صف+تشعيب)، بلا تحديد طلاب بأسمائهم — الطلاب يُحسَبون تلقائياً بمطابقة allowed_stages/allowed_grades/track في users.';
+
+-- ----------------------------------------------------------------------------
+-- دالة مساعدة: كل الطلاب الواقعين ضمن أي نطاق من نطاقات معلم معيّن
+-- ----------------------------------------------------------------------------
+create or replace function get_students_in_teacher_scope(p_teacher_id uuid)
+returns table (student_id uuid) as $$
+begin
+  return query
+  select distinct u.id
+  from users u
+  cross join teacher_scopes ts
+  where ts.teacher_id = p_teacher_id
+    and u.user_type = 'student'
+    and u.status = 'approved'
+    -- الطالب يطابق النطاق إن كانت مرحلته/صفه ضمن allowed_stages/allowed_grades
+    -- (هذان عمودان من نوع array في users، رأيناهما فعلياً في app/admin/page.tsx)
+    and ts.stage = any(u.allowed_stages)
+    and ts.grade = any(u.allowed_grades)
+    -- التشعيب: يطابق فقط لو النطاق يحدد تشعيباً معيّناً ويطابق track الطالب،
+    -- أو لو النطاق لا يحدد تشعيباً أصلاً (يشمل كل التشعيبات لهذا الصف)
+    and (ts.track is null or ts.track = u.track);
+end;
+$$ language plpgsql stable;
+
+comment on function get_students_in_teacher_scope(uuid) is
+  'يُرجع كل معرّفات الطلاب الواقعين ضمن أي نطاق تدريس مُخصَّص لمعلم معيّن، بمطابقة stage/grade/track تلقائياً — بلا أي ربط يدوي بالأسماء.';

@@ -7,6 +7,7 @@ import LessonFormModal from './LessonFormModal'
 
 type Props = {
   unitName: string
+  isArabic: boolean
   lessons: LessonItem[]
   filteredLessons: LessonItem[]
   loading: boolean
@@ -22,6 +23,7 @@ type Props = {
   onCreate: () => void
   onEdit: (lesson: LessonItem) => void
   onDelete: (lesson: LessonItem) => void
+  onToggleActive: (lesson: LessonItem) => void
   onCloseModal: () => void
   onSubmit: () => void
   onSearchChange: (value: string) => void
@@ -31,6 +33,7 @@ type Props = {
 export default function LessonsPageView(props: Props) {
   const {
     unitName,
+    isArabic,
     lessons,
     filteredLessons,
     loading,
@@ -46,6 +49,7 @@ export default function LessonsPageView(props: Props) {
     onCreate,
     onEdit,
     onDelete,
+    onToggleActive,
     onCloseModal,
     onSubmit,
     onSearchChange,
@@ -143,9 +147,11 @@ export default function LessonsPageView(props: Props) {
               <LessonCard
                 key={lesson.id}
                 lesson={lesson}
+                isArabic={isArabic}
                 deleting={deleting}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onToggleActive={onToggleActive}
               />
             ))}
           </div>
@@ -153,6 +159,7 @@ export default function LessonsPageView(props: Props) {
 
         <LessonFormModal
           open={modalOpen}
+          isArabic={isArabic}
           form={form}
           editingLesson={editingLesson}
           saving={saving}

@@ -114,9 +114,10 @@ export default function PackagesPageView(props: Props) {
               marginBottom: 16,
               fontSize: 14,
               fontWeight: BRAND.weightBold,
-              background: msg.startsWith('✅') ? 'rgba(220,140,60,0.10)' : 'rgba(140,20,40,0.08)',
-              color: msg.startsWith('✅') ? BRAND.gold : BRAND.crimson,
-              border: `1px solid ${msg.startsWith('✅') ? 'rgba(220,140,60,0.3)' : 'rgba(140,20,40,0.25)'}`,
+              // ── مُعدَّل: BRAND.gold كان منخفض التباين (تشويش بصري) ──
+              background: msg.startsWith('✅') ? 'rgba(5,150,105,0.10)' : 'rgba(140,20,40,0.08)',
+              color: msg.startsWith('✅') ? '#059669' : BRAND.crimson,
+              border: `1px solid ${msg.startsWith('✅') ? 'rgba(5,150,105,0.3)' : 'rgba(140,20,40,0.25)'}`,
             }}
           >
             {msg}

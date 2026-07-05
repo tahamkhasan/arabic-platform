@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
 import { supabase } from '@/lib/supabase'
 
-interface User { id: string; name: string; role: string; user_type: string; status?: string; theme_color?: string }
+interface User { id: string; name: string; role: string; user_type: string; status?: string }
 
 interface QuestionOption { id: string; text: string }
 interface Question {
@@ -38,7 +38,7 @@ export default function StudentQuizPage() {
 
   const [user, setUser] = useState<User | null>(null)
   const [accessToken, setAccessToken] = useState('')
-  const [themeColor, setThemeColor] = useState<string>(BRAND.red)
+  const themeColor = BRAND.deep
 
   const [quiz, setQuiz] = useState<QuizData | null>(null)
   const [attemptId, setAttemptId] = useState('')
@@ -69,7 +69,6 @@ export default function StudentQuizPage() {
       if (u.user_type !== 'student') { router.replace('/dashboard'); return }
       if (u.status === 'pending' || u.status === 'suspended') { router.replace('/pending-approval'); return }
       setUser(u)
-      if (u.theme_color) setThemeColor(u.theme_color)
     } catch { router.replace('/') }
   }, [router])
 
@@ -80,7 +79,6 @@ export default function StudentQuizPage() {
     })
   }, [user])
 
-  // ── بدء/استئناف المحاولة، ثم جلب الأسئلة ────────────────────────
   useEffect(() => {
     if (!accessToken || !quizId) return
     setLoading(true)
@@ -102,7 +100,6 @@ export default function StudentQuizPage() {
         if (data.time_limit_minutes) setSecondsLeft(data.time_limit_minutes * 60)
         startTimeRef.current = Date.now()
 
-        // جلب أسئلة الاختبار (الإجابات الصحيحة مخفية تلقائياً للطالب من الخادم)
         const quizRes = await fetch(`/api/quizzes/${quizId}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
@@ -114,7 +111,6 @@ export default function StudentQuizPage() {
         }
         setQuiz(quizData?.data ?? quizData)
 
-        // إن كانت محاولة مستأنفة، استرجع الإجابات السابقة
         if (data.is_existing) {
           const attemptRes = await fetch(`/api/quizzes/${quizId}/attempt`, {
             headers: { Authorization: `Bearer ${accessToken}` },
@@ -131,7 +127,6 @@ export default function StudentQuizPage() {
       })
   }, [accessToken, quizId])
 
-  // ── مؤقّت العدّ التنازلي ─────────────────────────────────────────
   useEffect(() => {
     if (secondsLeft === null || result) return
     if (secondsLeft <= 0) {
@@ -210,7 +205,7 @@ export default function StudentQuizPage() {
     )
   }
 
-  // ── شاشة النتائج بعد التسليم ── ────────────────────────────────
+  // ── شاشة النتائج بعد التسليم ────────────────────────────────────
   if (result) {
     return (
       <div dir="rtl" style={{ minHeight: '100vh', background: T.bg, fontFamily: BRAND.fontBody, padding: '24px 16px' }}>
@@ -230,9 +225,16 @@ export default function StudentQuizPage() {
                 <div key={q.id} style={{ padding: 16, borderRadius: 14, background: T.cardBg, border: `1.5px solid ${ev.is_correct ? 'rgba(5,150,105,0.3)' : 'rgba(180,40,40,0.25)'}` }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 8 }}>{i + 1}. {q.text}</div>
                   <div style={{ fontSize: 13, color: ev.is_correct ? '#059669' : BRAND.crimson, fontWeight: 700, marginBottom: 6 }}>{ev.immediate_feedback}</div>
+
+                  {/* ── الشرح التفصيلي: يعرض HTML من المحرر بشكل صحيح ── */}
                   {ev.detailed_explanation && (
-                    <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.7 }}>{ev.detailed_explanation}</div>
+                    <div
+                      className="explanation-html"
+                      style={{ fontSize: 13, color: T.sub, lineHeight: 1.8 }}
+                      dangerouslySetInnerHTML={{ __html: ev.detailed_explanation }}
+                    />
                   )}
+
                   {ev.needs_ai_review && (
                     <div style={{ fontSize: 12, color: BRAND.orange, marginTop: 6 }}>⏳ بانتظار مراجعة المعلم</div>
                   )}
@@ -241,10 +243,39 @@ export default function StudentQuizPage() {
             })}
           </div>
 
-          <button onClick={() => router.push('/student')} style={{ width: '100%', marginTop: 24, padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', fontWeight: 900, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={() => router.push('/student')} style={{ width: '100%', marginTop: 24, padding: '14px', borderRadius: 14, border: 'none', background: BRAND.gradMain, color: '#fff', fontWeight: 900, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
             ✅ تم — رجوع للرئيسية
           </button>
         </div>
+
+        {/* ── أنماط CSS للشرح المنسَّق (HTML من Tiptap) ── */}
+        <style>{`
+          .explanation-html p { margin: 0 0 6px; }
+          .explanation-html strong { font-weight: 800; color: inherit; }
+          .explanation-html em { font-style: italic; }
+          .explanation-html u { text-decoration: underline; }
+          .explanation-html ul { margin: 6px 0 6px 0; padding-right: 20px; list-style: disc; }
+          .explanation-html ol { margin: 6px 0 6px 0; padding-right: 20px; list-style: decimal; }
+          .explanation-html li { margin-bottom: 3px; }
+          .explanation-html [data-type="irab-node"] {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 3px;
+            vertical-align: top;
+            line-height: 1.3;
+          }
+          .explanation-html [data-type="irab-node"] .irab-word {
+            font-weight: 800;
+            border-bottom: 2px solid currentColor;
+            padding-bottom: 1px;
+          }
+          .explanation-html [data-type="irab-node"] .irab-label {
+            font-size: 10px;
+            opacity: 0.75;
+            white-space: nowrap;
+          }
+        `}</style>
       </div>
     )
   }
@@ -330,7 +361,7 @@ export default function StudentQuizPage() {
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={submitting}
-              style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`, color: '#1a1a2e', cursor: 'pointer', fontWeight: 900, fontSize: 15, fontFamily: 'inherit' }}>
+              style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: BRAND.gradMain, color: '#fff', cursor: 'pointer', fontWeight: 900, fontSize: 15, fontFamily: 'inherit' }}>
               {submitting ? '⏳ جارٍ التسليم...' : '✅ تسليم الاختبار'}
             </button>
           )}

@@ -36,11 +36,12 @@ export async function GET(
 
   try {
     const { data: quiz, error: quizError } = await supabaseAdmin
-      .from('quizzes')
-      .select('id, teacher_id, title')
-      .eq('id', quizId)
-      .single()
-
+  .from('quizzes')
+  .select('id, teacher_id, title')
+  .eq('id', quizId)
+  .is('deleted_at', null)
+  .single()
+  
     if (quizError || !quiz) {
       return NextResponse.json({ error: 'الاختبار غير موجود' }, { status: 404 })
     }
@@ -53,6 +54,7 @@ export async function GET(
       .select('id, student_id, answers, evaluations, score, submitted_at, time_spent_seconds, users:student_id(full_name, email)')
       .eq('id', attemptId)
       .eq('quiz_id', quizId)
+      .is('deleted_at', null)
       .single()
 
     if (attemptError || !attempt) {
@@ -63,6 +65,7 @@ export async function GET(
       .from('questions')
       .select('*')
       .eq('quiz_id', quizId)
+      .is('deleted_at', null)
       .order('sort_order', { ascending: true })
 
     if (questionsError) {

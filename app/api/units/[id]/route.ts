@@ -6,7 +6,8 @@ type Context = {
 }
 
 // ══════════════════════════════════════════════════════════════
-// PATCH — تعديل وحدة
+// PATCH — تعديل وحدة (يدعم أيضاً تغيير الفصل الدراسي semester،
+// ويُستخدَم أيضاً للتبديل السريع لـ is_active وحده من البطاقة)
 // ══════════════════════════════════════════════════════════════
 export async function PATCH(req: NextRequest, context: Context) {
   const auth = await requireAdmin(req)
@@ -15,12 +16,13 @@ export async function PATCH(req: NextRequest, context: Context) {
   try {
     const { id } = await context.params
     const body = await req.json()
-    const { name, description, order_num, icon, is_active } = body as {
+    const { name, description, order_num, icon, is_active, semester } = body as {
       name?: string
       description?: string | null
       order_num?: number
       icon?: string
       is_active?: boolean
+      semester?: number
     }
 
     const supabase = getServiceClient()
@@ -31,6 +33,7 @@ export async function PATCH(req: NextRequest, context: Context) {
     if (order_num !== undefined) updates.order_num = order_num
     if (icon !== undefined) updates.icon = icon
     if (is_active !== undefined) updates.is_active = is_active
+    if (semester !== undefined) updates.semester = semester === 2 ? 2 : 1
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'لا توجد حقول لتحديثها.' }, { status: 400 })

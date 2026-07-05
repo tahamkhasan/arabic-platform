@@ -56,6 +56,10 @@ export function useLessonQuiz({ lessonId, lessonName, lessonContent, grade }: Us
   }
 
   // ── توليد تلقائي بالذكاء الاصطناعي — يستدعي /api/quiz العام الموجود فعلاً ──
+  // ── جديد: نمرّر lessonId دائماً — إن كان lessonContent فارغاً (شائع
+  // الآن لدروس اللغة العربية التي تخزّن محتواها في ملف "فهم واستيعاب"
+  // المرفوع بدل حقل content القديم)، يجلب الخادم النص المستخرَج من
+  // الملف تلقائياً بدل الاعتماد على معرفة الذكاء الاصطناعي العامة ────
   async function generate(count = 8) {
     setGenerating(true)
     setMessage('')
@@ -64,6 +68,7 @@ export function useLessonQuiz({ lessonId, lessonName, lessonContent, grade }: Us
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lessonId,
           lessonName,
           material: lessonContent || '',
           grade: grade || '',

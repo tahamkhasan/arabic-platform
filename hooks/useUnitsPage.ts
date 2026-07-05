@@ -20,6 +20,10 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
   const [editingUnit, setEditingUnit] = useState<UnitItem | null>(null)
   const [form, setForm] = useState<UnitFormState>(emptyUnitForm)
 
+  // ── الفصل الدراسي المعروض حالياً في تبويب الإدارة (1 أو 2) ──
+  // هذا تبويب عرض/إدارة فقط، منفصل عن إعداد "الفصل النشط للطلاب"
+  const [activeSemesterTab, setActiveSemesterTab] = useState<1 | 2>(1)
+
   useEffect(() => {
     if (subjectId) loadUnits()
   }, [subjectId])
@@ -37,17 +41,22 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
     }
   }
 
+  const semesterUnits = useMemo(
+    () => units.filter((u) => (u.semester === 2 ? 2 : 1) === activeSemesterTab),
+    [units, activeSemesterTab]
+  )
+
   const filteredUnits = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return units
-    return units.filter((u) =>
+    if (!q) return semesterUnits
+    return semesterUnits.filter((u) =>
       [u.name, u.description].filter(Boolean).join(' ').toLowerCase().includes(q)
     )
-  }, [units, search])
+  }, [semesterUnits, search])
 
   function openCreateModal() {
     setEditingUnit(null)
-    setForm({ ...emptyUnitForm, order_num: units.length + 1 })
+    setForm({ ...emptyUnitForm, order_num: semesterUnits.length + 1, semester: activeSemesterTab })
     setModalOpen(true)
   }
 
@@ -86,6 +95,7 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
         icon: form.icon,
         order_num: form.order_num,
         is_active: form.is_active,
+        semester: form.semester,
       }
 
       const res = await fetch(editingUnit ? `/api/units/${editingUnit.id}` : '/api/units', {
@@ -146,6 +156,29 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
     }
   }
 
+  // ── تبديل سريع لإظهار/إخفاء الوحدة (is_active) بلا فتح النافذة ──
+  async function toggleUnitActive(unit: UnitItem) {
+    if (!accessToken) return
+    try {
+      const res = await fetch(`/api/units/${unit.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ is_active: !unit.is_active }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'تعذر تغيير حالة الوحدة.')
+
+      setUnits((prev) => prev.map((u) => (u.id === unit.id ? { ...u, is_active: !unit.is_active } : u)))
+      setMsg(!unit.is_active ? `تم إظهار وحدة ${unit.name}.` : `تم إخفاء وحدة ${unit.name}.`)
+      setTimeout(() => setMsg(''), 2000)
+    } catch (error: any) {
+      setMsg(error?.message || 'حدث خطأ أثناء تغيير حالة الوحدة.')
+    }
+  }
+
   return {
     units,
     filteredUnits,
@@ -157,6 +190,8 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
     modalOpen,
     editingUnit,
     form,
+    activeSemesterTab,
+    setActiveSemesterTab,
     setSearch,
     loadUnits,
     openCreateModal,
@@ -165,5 +200,6 @@ export function useUnitsPage({ subjectId, accessToken }: UseUnitsPageArgs) {
     updateForm,
     submitUnit,
     deleteUnit,
+    toggleUnitActive,
   }
 }

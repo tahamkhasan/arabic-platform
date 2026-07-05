@@ -31,6 +31,8 @@ function AdminSubjectUnitsContent() {
     modalOpen,
     editingUnit,
     form,
+    activeSemesterTab,
+    setActiveSemesterTab,
     setSearch,
     loadUnits,
     openCreateModal,
@@ -39,6 +41,7 @@ function AdminSubjectUnitsContent() {
     updateForm,
     submitUnit,
     deleteUnit,
+    toggleUnitActive,
   } = useUnitsPage({ subjectId, accessToken })
 
   if (guardError) {
@@ -92,14 +95,19 @@ function AdminSubjectUnitsContent() {
       modalOpen={modalOpen}
       editingUnit={editingUnit}
       form={form}
+      activeSemesterTab={activeSemesterTab}
+      onSemesterTabChange={setActiveSemesterTab}
       onBack={() => router.push('/admin/subjects')}
       onRefresh={() => loadUnits()}
       onCreate={openCreateModal}
       onEdit={openEditModal}
       onDelete={deleteUnit}
       onOpenLessons={(unit: UnitItem) =>
-        router.push(`/admin/units/${unit.id}/lessons?unitName=${encodeURIComponent(unit.name)}`)
+        router.push(
+          `/admin/units/${unit.id}/lessons?unitName=${encodeURIComponent(unit.name)}&subjectName=${encodeURIComponent(subjectName)}`
+        )
       }
+      onToggleActive={toggleUnitActive}
       onCloseModal={closeModal}
       onSubmit={submitUnit}
       onSearchChange={setSearch}

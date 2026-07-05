@@ -1,6 +1,17 @@
 // ============================================================
 // API: دردشة مداد — إرسال رسالة واستقبال رد
 // POST: يرسل رسالة ويرجع الرد كـ Streaming (نص يتدفق تدريجياً)
+//
+// ── مُصحَّح: كان الكود يحاول قراءة response.body (الـReadableStream
+// القادم من Anthropic) مرتين بالتوازي — مرة عبر stream.pipeThrough()
+// لإرجاعه للمتصفح، ومرة عبر stream.getReader() داخل دالة الخلفية
+// لحفظ النص الكامل في قاعدة البيانات. ReadableStream لا يدعم أكثر
+// من قارئ واحد على المصدر نفسه؛ ثاني استدعاء يفشل بـ:
+// "TypeError: Invalid state: The ReadableStream is locked"
+//
+// الحل القياسي: stream.tee() يُنشئ نسختين مستقلتين تماماً من نفس
+// الـstream، كل واحدة تُقرأ بمعزل عن الأخرى بأمان. نُمرّر الأولى
+// للمستخدم عبر pipeThrough، والثانية لدالة الحفظ في الخلفية. ─────
 // ============================================================
 
 import { NextRequest } from 'next/server';
@@ -190,18 +201,24 @@ export async function POST(req: NextRequest) {
       return error('فشل الاستجابة من الذكاء الاصطناعي', 500);
     }
 
-    // 11. اقرأ الرد كـ Stream وأرجعه
-    const stream = response.body;
-    if (!stream) {
+    // 11. اقرأ الرد كـ Stream
+    const rawStream = response.body;
+    if (!rawStream) {
       return error('لم يتم استلام رد من الذكاء الاصطناعي', 500);
     }
 
-    // أنشئ Transform Stream لقراءة SSE من Anthropic
+    // ── مُصحَّح: tee() يُنشئ نسختين مستقلتين من الـstream الواحد —
+    // الأولى (forUser) تُرسَل فعلياً للمتصفح، الثانية (forSaving)
+    // تُقرأ بمعزل تام في الخلفية لاستخراج النص الكامل وحفظه. هذا
+    // يحل مشكلة "stream مقفل" لأن كل فرع له قارئ مستقل خاص به ──────
+    const [forUser, forSaving] = rawStream.tee();
+
+    // أنشئ Transform Stream لقراءة SSE من Anthropic (للمستخدم)
     const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
 
     const transformStream = new TransformStream({
       async transform(chunk, controller) {
+        const decoder = new TextDecoder();
         const text = decoder.decode(chunk, { stream: true });
         const lines = text.split('\n');
 
@@ -224,18 +241,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 12. في الخلفية: احفظ رد المساعد بالكامل
-    // نحتاج قراءة الرد كاملاً لحفظه
+    // 12. في الخلفية: احفظ رد المساعد بالكامل — يقرأ فرع forSaving
+    // المستقل، بمعزل تام عن forUser الذي يذهب للمتصفح ─────────────
     (async () => {
       try {
-        const reader = stream.getReader();
+        const reader = forSaving.getReader();
+        const decoder = new TextDecoder();
         let fullResponse = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           const text = decoder.decode(value, { stream: true });
-          
+
           // استخرج النص من SSE
           const lines = text.split('\n');
           for (const line of lines) {
@@ -290,8 +308,8 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    // 13. أرجع Stream للمستخدم
-    return new Response(stream.pipeThrough(transformStream), {
+    // 13. أرجع فرع forUser فقط للمستخدم — منفصل تماماً عن forSaving
+    return new Response(forUser.pipeThrough(transformStream), {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',

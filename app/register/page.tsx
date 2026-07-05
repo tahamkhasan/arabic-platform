@@ -1,30 +1,34 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { BRAND } from '@/lib/constants/theme'
 
-const T = {
-  bg: '#F5F0E8',
-  cardBg: '#FDFAF5',
-  textCol: '#1A1221',
-  subCol: '#6B5050',
-  borderCol: 'rgba(192,57,43,0.15)',
-  borderFocus: 'rgba(192,57,43,0.45)',
-  inputBg: 'rgba(192,57,43,0.05)',
-  headerBg: 'rgba(245,240,232,0.97)',
-  shadow: '0 2px 12px rgba(192,57,43,0.08)',
-  gradMain: 'linear-gradient(135deg,#C0392B,#E07020)',
-  gradBlue: 'linear-gradient(135deg,#2563EB,#1D4ED8)',
-  shadowBlue: '0 8px 28px rgba(37,99,235,0.40)',
+const B = {
+  bg: BRAND.bg,
+  cardBg: BRAND.bgCard,
+  text: BRAND.text,
+  sub: BRAND.sub,
+  border: BRAND.border,
+  borderFocus: BRAND.borderStrong,
+  inputBg: 'rgba(150,30,45,0.04)',
+  headerBg: 'rgba(247,242,234,0.97)',
+  shadow: BRAND.shadow,
+  gradMain: BRAND.gradMain,
+  gradBlue: BRAND.gradBlue,
+  shadowBlue: BRAND.shadowBlue,
+  crimson: BRAND.crimson,
 }
 
-// ── المرحلة والصف — يختارهما الطالب مباشرة عند التسجيل ─────────
-// (فقط حين لا توجد باقة/مادة محدَّدة مسبقاً من صفحة الهبوط)
+const HEADING = BRAND.fontHeading
+const BODY = BRAND.fontBody
+
 const STAGE_GRADES: Record<string, string[]> = {
   'ابتدائي': ['1', '2', '3', '4', '5'],
-  'متوسط':   ['6', '7', '8', '9'],
-  'ثانوي':   ['10', '11', '12'],
+  'متوسط': ['6', '7', '8', '9'],
+  'ثانوي': ['10', '11', '12'],
 }
 
 type RegisterType = 'staff' | 'student'
@@ -50,12 +54,9 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
 
-  // خاصة بالطالب فقط — مرحلة وصف واحد، لا أدوار ولا roleId هنا
-  // (تُستخدَم فقط في حال عدم وجود باقة/مادة محدَّدة من الهبوط)
   const [stage, setStage] = useState('')
   const [grade, setGrade] = useState('')
 
-  // ── جديد: الباقة أو المادة المختارة من صفحة الهبوط ──────────
   const planType = searchParams.get('type') as PlanType | null
   const planId = searchParams.get('id')
   const [selectedPlan, setSelectedPlan] = useState<SelectedPlan | null>(null)
@@ -69,7 +70,6 @@ function RegisterForm() {
   const [success, setSuccess] = useState(false)
   const [focusField, setFocusField] = useState('')
 
-  // ── جلب تفاصيل الباقة/المادة المختارة لعرضها كتأكيد ─────────
   useEffect(() => {
     if (!planType || !planId) {
       setPlanLoading(false)
@@ -89,8 +89,8 @@ function RegisterForm() {
         if (!mounted) return
         const list =
           planType === 'package'
-            ? (data?.items ?? data?.packages ?? [])
-            : (data?.subjects ?? [])
+            ? data?.items ?? data?.packages ?? []
+            : data?.subjects ?? []
         const found = list.find((item: any) => item.id === planId)
         if (found) {
           setSelectedPlan({
@@ -120,7 +120,7 @@ function RegisterForm() {
 
   function handleStageChange(value: string) {
     setStage(value)
-    setGrade('') // إعادة ضبط الصف عند تغيير المرحلة
+    setGrade('')
   }
 
   function validate(): string | null {
@@ -131,8 +131,6 @@ function RegisterForm() {
     if (password !== confirmPassword) return 'كلمتا المرور غير متطابقتين'
 
     if (registerType === 'student') {
-      // المرحلة/الصف اليدويان مطلوبان فقط حين لا توجد باقة/مادة
-      // محدَّدة مسبقاً تُستنتج منها هاتان القيمتان تلقائياً.
       if (!hasPreselectedPlan || !selectedPlan) {
         if (!stage) return 'يرجى اختيار المرحلة الدراسية'
         if (!grade) return 'يرجى اختيار الصف'
@@ -142,7 +140,7 @@ function RegisterForm() {
     return null
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError('')
 
@@ -155,15 +153,6 @@ function RegisterForm() {
     setLoading(true)
 
     try {
-      // ══ الحمولة المُرسلة — بدون roleId / roleKey / assigned_role_key ══
-      // userType فقط: 'teacher' (موظف) أو 'student' (طالب).
-      // تخصيص الدور الدقيق (معلم/مشرف/مدير/مدخل بيانات) يتم لاحقاً
-      // من لوحة المدير عبر assigned_role_id — لا علاقة لهذا الفورم به.
-      //
-      // جديد — planType/planId: إن وُجد اختيار باقة/مادة من صفحة
-      // الهبوط، تُرسَل المعرّفات ليكتب /api/register الاشتراك مباشرة
-      // عند إنشاء الحساب، ويُستنتج allowedStages/allowedGrades من
-      // الباقة/المادة نفسها بدل الحقول اليدوية.
       const usePreselected = hasPreselectedPlan && Boolean(selectedPlan)
 
       const payload = {
@@ -209,21 +198,20 @@ function RegisterForm() {
     }
   }
 
-  const inputStyle = (field: string): React.CSSProperties => ({
+  const inputStyle = (field: string): CSSProperties => ({
     width: '100%',
     padding: '13px 44px 13px 16px',
     borderRadius: 12,
-    border: `1.5px solid ${focusField === field ? T.borderFocus : T.borderCol}`,
-    background: T.inputBg,
-    color: T.textCol,
+    border: `1.5px solid ${focusField === field ? B.borderFocus : B.border}`,
+    background: B.inputBg,
+    color: B.text,
     fontSize: 14,
-    fontFamily: 'inherit',
-    boxShadow: focusField === field ? '0 0 0 3px rgba(192,57,43,0.08)' : 'none',
+    fontFamily: BODY,
+    boxShadow: focusField === field ? '0 0 0 3px rgba(150,30,45,0.08)' : 'none',
     transition: 'border-color 0.2s, box-shadow 0.2s',
     outline: 'none',
   })
 
-  // ══ شاشة النجاح ══
   if (success) {
     return (
       <div
@@ -233,8 +221,8 @@ function RegisterForm() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: T.bg,
-          fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+          background: B.bg,
+          fontFamily: BODY,
           padding: 20,
         }}
       >
@@ -242,19 +230,19 @@ function RegisterForm() {
           style={{
             width: '100%',
             maxWidth: 460,
-            background: T.cardBg,
+            background: B.cardBg,
             borderRadius: 22,
-            border: `1px solid ${T.borderCol}`,
-            boxShadow: T.shadow,
+            border: `1px solid ${B.border}`,
+            boxShadow: B.shadow,
             padding: '40px 32px',
             textAlign: 'center',
           }}
         >
           <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: T.textCol, marginBottom: 10 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: B.text, marginBottom: 10, fontFamily: HEADING }}>
             تم إنشاء حسابك بنجاح
           </h1>
-          <p style={{ fontSize: 14, color: T.subCol, lineHeight: 1.9, marginBottom: 28 }}>
+          <p style={{ fontSize: 14, color: B.sub, lineHeight: 1.9, marginBottom: 28, fontFamily: BODY }}>
             {registerType === 'student'
               ? hasPreselectedPlan && selectedPlan
                 ? `تم حفظ اختيارك (${selectedPlan.name}) مع حسابك. بانتظار موافقة المدير على حسابك. سيصلك إشعار عند التفعيل.`
@@ -270,12 +258,13 @@ function RegisterForm() {
               width: '100%',
               padding: '14px',
               borderRadius: 12,
-              background: T.gradBlue,
+              background: B.gradBlue,
               color: '#fff',
               fontWeight: 900,
               fontSize: 15,
+              fontFamily: BODY,
               textDecoration: 'none',
-              boxShadow: T.shadowBlue,
+              boxShadow: B.shadowBlue,
             }}
           >
             الذهاب إلى تسجيل الدخول ←
@@ -290,9 +279,9 @@ function RegisterForm() {
       dir="rtl"
       style={{
         minHeight: '100vh',
-        background: T.bg,
-        color: T.textCol,
-        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+        background: B.bg,
+        color: B.text,
+        fontFamily: BODY,
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -302,31 +291,30 @@ function RegisterForm() {
         body { margin: 0; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes glow {
-          0%, 100% { box-shadow: ${T.shadowBlue}; }
+          0%, 100% { box-shadow: ${B.shadowBlue}; }
           50% { box-shadow: 0 12px 38px rgba(37,99,235,0.62); }
         }
         select option {
-          background: #F5F0E8 !important;
-          color: #1A1221 !important;
+          background: ${B.bg} !important;
+          color: ${B.text} !important;
         }
         select { color-scheme: light; }
         input:focus, select:focus { outline: none; }
       `}</style>
 
-      {/* ══ شريط علوي مبسّط ══ */}
       <header
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 50,
-          background: T.headerBg,
+          background: B.headerBg,
           backdropFilter: 'blur(20px)',
-          borderBottom: `1px solid ${T.borderCol}`,
+          borderBottom: `1px solid ${B.border}`,
           padding: '12px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: T.shadow,
+          boxShadow: B.shadow,
         }}
       >
         <Link
@@ -338,18 +326,19 @@ function RegisterForm() {
               width: 36,
               height: 36,
               borderRadius: 10,
-              background: T.gradMain,
+              background: B.gradMain,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 18,
               fontWeight: 900,
               color: '#fff',
+              fontFamily: HEADING,
             }}
           >
             م
           </div>
-          <span style={{ fontSize: 15, fontWeight: 900, color: T.textCol }}>مِداد</span>
+          <span style={{ fontSize: 15, fontWeight: 900, color: B.text, fontFamily: HEADING }}>مِداد</span>
         </Link>
 
         <Link
@@ -359,8 +348,9 @@ function RegisterForm() {
             borderRadius: 9,
             fontSize: 13,
             fontWeight: 700,
-            border: `1.5px solid ${T.borderCol}`,
-            color: T.subCol,
+            fontFamily: BODY,
+            border: `1.5px solid ${B.border}`,
+            color: B.sub,
             textDecoration: 'none',
           }}
         >
@@ -368,7 +358,6 @@ function RegisterForm() {
         </Link>
       </header>
 
-      {/* ══ النموذج ══ */}
       <main
         style={{
           flex: 1,
@@ -383,33 +372,32 @@ function RegisterForm() {
           style={{
             width: '100%',
             maxWidth: 480,
-            background: T.cardBg,
+            background: B.cardBg,
             borderRadius: 22,
-            border: `1px solid ${T.borderCol}`,
-            boxShadow: T.shadow,
+            border: `1px solid ${B.border}`,
+            boxShadow: B.shadow,
             padding: '32px 28px',
           }}
         >
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: T.textCol, marginBottom: 6, textAlign: 'center' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: B.text, marginBottom: 6, textAlign: 'center', fontFamily: HEADING }}>
             إنشاء حساب جديد ✨
           </h1>
-          <p style={{ fontSize: 14, color: T.subCol, textAlign: 'center', marginBottom: 24 }}>
+          <p style={{ fontSize: 14, color: B.sub, textAlign: 'center', marginBottom: 24, fontFamily: BODY }}>
             انضم إلى منصة مِداد
           </p>
 
-          {/* ── جديد: شريط تأكيد الباقة/المادة المختارة من الهبوط ── */}
           {hasPreselectedPlan && registerType === 'student' && (
             <div
               style={{
                 marginBottom: 20,
                 padding: '14px 16px',
                 borderRadius: 14,
-                background: planError ? 'rgba(192,57,43,0.06)' : 'rgba(37,99,235,0.07)',
-                border: `1.5px solid ${planError ? 'rgba(192,57,43,0.25)' : 'rgba(37,99,235,0.25)'}`,
+                background: planError ? 'rgba(150,30,45,0.06)' : 'rgba(37,99,235,0.07)',
+                border: `1.5px solid ${planError ? 'rgba(150,30,45,0.25)' : 'rgba(37,99,235,0.25)'}`,
               }}
             >
               {planLoading ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: T.subCol }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: B.sub, fontFamily: BODY }}>
                   <span
                     style={{
                       width: 14,
@@ -424,20 +412,20 @@ function RegisterForm() {
                   جارٍ تحميل تفاصيل اختيارك...
                 </div>
               ) : planError ? (
-                <div style={{ fontSize: 13, color: '#C0392B', lineHeight: 1.8 }}>
+                <div style={{ fontSize: 13, color: B.crimson, lineHeight: 1.8, fontFamily: BODY }}>
                   ⚠️ {planError}
                 </div>
               ) : selectedPlan ? (
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#2563EB', marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#2563EB', marginBottom: 4, fontFamily: BODY }}>
                     {planType === 'package' ? '📦 باقتك المختارة' : '📚 مادتك المختارة'}
                   </div>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: T.textCol, marginBottom: 6 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: B.text, marginBottom: 6, fontFamily: HEADING }}>
                     {selectedPlan.name}
                   </div>
                   <Link
                     href="/landing#plans"
-                    style={{ fontSize: 12, color: T.subCol, textDecoration: 'underline' }}
+                    style={{ fontSize: 12, color: B.sub, textDecoration: 'underline', fontFamily: BODY }}
                   >
                     تغيير الاختيار
                   </Link>
@@ -446,9 +434,8 @@ function RegisterForm() {
             </div>
           )}
 
-          {/* ── نوع الحساب ── */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 8, fontFamily: BODY }}>
               نوع الحساب
             </label>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -464,11 +451,11 @@ function RegisterForm() {
                     flex: 1,
                     padding: '14px 10px',
                     borderRadius: 12,
-                    border: `2px solid ${registerType === opt.id ? '#C0392B' : T.borderCol}`,
-                    background: registerType === opt.id ? 'rgba(192,57,43,0.08)' : 'transparent',
-                    color: registerType === opt.id ? '#C0392B' : T.subCol,
+                    border: `2px solid ${registerType === opt.id ? B.crimson : B.border}`,
+                    background: registerType === opt.id ? 'rgba(150,30,45,0.08)' : 'transparent',
+                    color: registerType === opt.id ? B.crimson : B.sub,
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: BODY,
                     fontWeight: 700,
                     fontSize: 13,
                     transition: 'all 0.2s',
@@ -480,7 +467,7 @@ function RegisterForm() {
               ))}
             </div>
             {registerType === 'staff' && (
-              <p style={{ fontSize: 12, color: T.subCol, marginTop: 8, lineHeight: 1.7 }}>
+              <p style={{ fontSize: 12, color: B.sub, marginTop: 8, lineHeight: 1.7, fontFamily: BODY }}>
                 سيحدد المدير دورك بدقة (معلم / مشرف / مدخل بيانات) بعد الموافقة على حسابك.
               </p>
             )}
@@ -494,9 +481,10 @@ function RegisterForm() {
                 marginBottom: 16,
                 fontSize: 13,
                 fontWeight: 600,
-                background: 'rgba(192,57,43,0.08)',
-                border: '1.5px solid rgba(192,57,43,0.28)',
-                color: '#C0392B',
+                fontFamily: BODY,
+                background: 'rgba(150,30,45,0.08)',
+                border: '1.5px solid rgba(150,30,45,0.28)',
+                color: B.crimson,
               }}
             >
               {error}
@@ -504,9 +492,8 @@ function RegisterForm() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* الاسم */}
             <div>
-              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                 الاسم الكامل
               </label>
               <div style={{ position: 'relative' }}>
@@ -524,9 +511,8 @@ function RegisterForm() {
               </div>
             </div>
 
-            {/* البريد */}
             <div>
-              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                 البريد الإلكتروني
               </label>
               <div style={{ position: 'relative' }}>
@@ -545,9 +531,8 @@ function RegisterForm() {
               </div>
             </div>
 
-            {/* كلمة المرور */}
             <div>
-              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                 كلمة المرور
               </label>
               <div style={{ position: 'relative' }}>
@@ -566,6 +551,7 @@ function RegisterForm() {
                 <button
                   type="button"
                   onClick={() => setShowPass(s => !s)}
+                  aria-label={showPass ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                   style={{
                     position: 'absolute',
                     left: 13,
@@ -575,7 +561,7 @@ function RegisterForm() {
                     border: 'none',
                     cursor: 'pointer',
                     fontSize: 15,
-                    color: T.subCol,
+                    color: B.sub,
                     padding: 0,
                   }}
                 >
@@ -584,9 +570,8 @@ function RegisterForm() {
               </div>
             </div>
 
-            {/* تأكيد كلمة المرور */}
             <div>
-              <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                 تأكيد كلمة المرور
               </label>
               <div style={{ position: 'relative' }}>
@@ -605,13 +590,10 @@ function RegisterForm() {
               </div>
             </div>
 
-            {/* المرحلة والصف — للطالب فقط، اختيار مباشر بدون أدوار
-                يُعرَض فقط حين لا توجد باقة/مادة محدَّدة مسبقاً من الهبوط،
-                لأن المرحلة/الصف تُستنتج تلقائياً من الاختيار في هذه الحالة. */}
             {registerType === 'student' && !(hasPreselectedPlan && selectedPlan) && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                     المرحلة
                   </label>
                   <select
@@ -627,7 +609,7 @@ function RegisterForm() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: T.subCol, display: 'block', marginBottom: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: B.sub, display: 'block', marginBottom: 6, fontFamily: BODY }}>
                     الصف
                   </label>
                   <select
@@ -649,7 +631,6 @@ function RegisterForm() {
               </div>
             )}
 
-            {/* زر الإنشاء — أزرق وهاج */}
             <button
               type="submit"
               disabled={loading}
@@ -659,12 +640,12 @@ function RegisterForm() {
                 borderRadius: 13,
                 border: 'none',
                 marginTop: 6,
-                background: loading ? 'rgba(107,80,80,0.12)' : T.gradBlue,
+                background: loading ? 'rgba(107,80,80,0.12)' : B.gradBlue,
                 color: loading ? 'rgba(107,80,80,0.5)' : '#fff',
                 fontSize: 15,
                 fontWeight: 900,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
+                fontFamily: BODY,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -693,9 +674,9 @@ function RegisterForm() {
             </button>
           </div>
 
-          <p style={{ textAlign: 'center', fontSize: 12, color: T.subCol, marginTop: 20 }}>
+          <p style={{ textAlign: 'center', fontSize: 12, color: B.sub, marginTop: 20, fontFamily: BODY }}>
             بإنشائك الحساب، أنت توافق على{' '}
-            <Link href="/landing" style={{ color: '#C0392B', textDecoration: 'none', fontWeight: 700 }}>
+            <Link href="/landing" style={{ color: B.crimson, textDecoration: 'none', fontWeight: 700, fontFamily: BODY }}>
               شروط استخدام مِداد
             </Link>
           </p>
@@ -705,8 +686,6 @@ function RegisterForm() {
   )
 }
 
-// ══ غلاف Suspense إلزامي لأن RegisterForm يستخدم useSearchParams() ══
-// (متطلب Next.js App Router لأي مكوّن client يقرأ من searchParams)
 function RegisterFormFallback() {
   return (
     <div
@@ -716,16 +695,16 @@ function RegisterFormFallback() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: T.bg,
-        fontFamily: 'Calibri, Segoe UI, Tahoma, Arial, sans-serif',
+        background: B.bg,
+        fontFamily: BODY,
       }}
     >
       <div
         style={{
           width: 40,
           height: 40,
-          border: `4px solid ${T.borderFocus}`,
-          borderTopColor: '#C0392B',
+          border: `4px solid ${B.border}`,
+          borderTopColor: B.crimson,
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }}

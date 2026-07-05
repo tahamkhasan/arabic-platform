@@ -30,18 +30,7 @@ export default function AdminSubjectsPage() {
 
   if (guardError) {
     return (
-      <div
-        dir="rtl"
-        style={{
-          minHeight: '100vh',
-          display: 'grid',
-          placeItems: 'center',
-          background: BRAND.bg,
-          color: BRAND.text,
-          fontFamily: BRAND.fontBody,
-          padding: 24,
-        }}
-      >
+      <div dir="rtl" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: BRAND.bg, color: BRAND.text, fontFamily: BRAND.fontBody, padding: 24 }}>
         {guardError}
       </div>
     )
@@ -49,18 +38,7 @@ export default function AdminSubjectsPage() {
 
   if (!ready) {
     return (
-      <div
-        dir="rtl"
-        style={{
-          minHeight: '100vh',
-          display: 'grid',
-          placeItems: 'center',
-          background: BRAND.bg,
-          color: BRAND.text,
-          fontFamily: BRAND.fontBody,
-          padding: 24,
-        }}
-      >
+      <div dir="rtl" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: BRAND.bg, color: BRAND.text, fontFamily: BRAND.fontBody, padding: 24 }}>
         جارٍ التحقق من صلاحيات الأدمن...
       </div>
     )
@@ -78,6 +56,7 @@ export default function AdminSubjectsPage() {
       modalOpen={modalOpen}
       editingSubject={editingSubject}
       form={form}
+      accessToken={accessToken ?? ''}
       onBack={() => router.push('/admin')}
       onRefresh={() => loadSubjects()}
       onCreate={openCreateModal}

@@ -28,9 +28,11 @@ interface HistoryItem {
   created_at:  string
 }
 
-// ── ثوابت الأدوات ─────────────────────────────────────────────────
+// ── ثوابت الأدوات — مُصحَّح: BRAND.gold (كانت أحمر زاهٍ أصلاً، ثم
+// أصبحت أزرق بعد تعديل سابق) استُبدلت بألوان BRAND الثابتة المتّسقة
+// مع الهوية البصرية (عنابي/أحمر/قرمزي/برتقالي)، لا لون متغيّر ─────
 const TOOL_META: Record<string, { label: string; icon: string; color: string }> = {
-  explain:   { label: 'شرح الدرس',      icon: '💡', color: BRAND.gold },
+  explain:   { label: 'شرح الدرس',      icon: '💡', color: BRAND.orange },
   worksheet: { label: 'ورقة عمل',        icon: '📋', color: BRAND.red },
   game:      { label: 'لعبة لغوية',      icon: '🎮', color: BRAND.orangeRed },
   plan:      { label: 'تحضير الدرس',     icon: '📖', color: BRAND.deep },
@@ -62,9 +64,10 @@ function formatDate(iso: string): string {
 export default function HistoryPage() {
   const router = useRouter()
 
-  // ── المستخدم ──────────────────────────────────────────────────
+  // ── المستخدم — مُعدَّل: themeColor ثابت (BRAND.deep)، لا قراءة
+  // من theme_color المخزَّن بعد الآن ───────────────────────────────
   const [user,       setUser]       = useState<User | null>(null)
-  const [themeColor, setThemeColor] = useState<string>(BRAND.red)
+  const themeColor = BRAND.deep
   const [isDark,     setIsDark]     = useState(false)
 
   // ── السجل ─────────────────────────────────────────────────────
@@ -94,7 +97,7 @@ export default function HistoryPage() {
     try {
       const u = JSON.parse(saved) as User
       setUser(u)
-      if (u.theme_color) setThemeColor(u.theme_color)
+      // ── مُزال: لا نقرأ theme_color بعد الآن، اللون ثابت دائماً ──
       const mode = u.theme_mode ?? 'light'
       setIsDark(
         mode === 'dark' ||
@@ -138,7 +141,6 @@ export default function HistoryPage() {
   // ── تبديل المفضلة ─────────────────────────────────────────────
   async function toggleFavorite(item: HistoryItem) {
     const newVal = !item.is_favorite
-    // تحديث فوري في الواجهة
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, is_favorite: newVal } : i))
     if (openItem?.id === item.id) setOpenItem({ ...openItem, is_favorite: newVal })
 
@@ -287,14 +289,14 @@ export default function HistoryPage() {
           ))}
         </div>
 
-        {/* فلتر المفضلة */}
+        {/* فلتر المفضلة — مُصحَّح: BRAND.gold ← BRAND.orange */}
         <button
           onClick={() => setFilterFavorite(f => !f)}
           style={{
             padding: '6px 14px', borderRadius: 8, border: `1px solid`,
-            borderColor: filterFavorite ? BRAND.gold : borderCol,
-            background:  filterFavorite ? 'rgba(220,140,60,0.15)' : 'transparent',
-            color:       filterFavorite ? BRAND.gold : subCol,
+            borderColor: filterFavorite ? BRAND.orange : borderCol,
+            background:  filterFavorite ? 'rgba(220,100,40,0.15)' : 'transparent',
+            color:       filterFavorite ? BRAND.orange : subCol,
             cursor: 'pointer', fontSize: 12, fontWeight: 700,
             fontFamily: 'inherit', transition: 'all 0.15s',
           }}
@@ -337,7 +339,7 @@ export default function HistoryPage() {
               onClick={() => router.push('/dashboard')}
               style={{
                 padding: '10px 24px', borderRadius: 12, border: 'none',
-                background: `linear-gradient(135deg,${themeColor},${BRAND.gold})`,
+                background: BRAND.gradMain,
                 color: '#1a1a2e', fontWeight: 800, fontSize: 13,
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
@@ -364,10 +366,10 @@ export default function HistoryPage() {
                   key={item.id}
                   style={{
                     background: cardBg, borderRadius: 16, padding: 16,
-                    border: `1px solid ${item.is_favorite ? BRAND.gold + '55' : borderCol}`,
+                    border: `1px solid ${item.is_favorite ? BRAND.orange + '55' : borderCol}`,
                     cursor: 'pointer', transition: 'all 0.2s',
                     position: 'relative',
-                    boxShadow: item.is_favorite ? `0 0 0 1px ${BRAND.gold}33` : 'none',
+                    boxShadow: item.is_favorite ? `0 0 0 1px ${BRAND.orange}33` : 'none',
                   }}
                   onClick={() => setOpenItem(item)}
                   onMouseEnter={e => {
@@ -376,7 +378,7 @@ export default function HistoryPage() {
                   }}
                   onMouseLeave={e => {
                     (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
-                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = item.is_favorite ? `0 0 0 1px ${BRAND.gold}33` : 'none'
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = item.is_favorite ? `0 0 0 1px ${BRAND.orange}33` : 'none'
                   }}
                 >
                   {/* رأس البطاقة */}
@@ -648,7 +650,7 @@ export default function HistoryPage() {
   )
 }
 
-// ── مكوّن نسخ صغير ───────────────────────────────────────────────
+// ── مكوّن نسخ صغير — مُصحَّح: BRAND.gold ← BRAND.orange ────────────
 function CopyButton({ text, themeColor }: { text: string; themeColor: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -657,9 +659,9 @@ function CopyButton({ text, themeColor }: { text: string; themeColor: string }) 
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '6px 12px', borderRadius: 8,
-        border: `1px solid ${copied ? BRAND.gold : themeColor + '44'}`,
-        background: copied ? 'rgba(220,140,60,0.15)' : themeColor + '15',
-        color: copied ? BRAND.gold : themeColor,
+        border: `1px solid ${copied ? BRAND.orange : themeColor + '44'}`,
+        background: copied ? 'rgba(220,100,40,0.15)' : themeColor + '15',
+        color: copied ? BRAND.orange : themeColor,
         cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
       }}
     >

@@ -1,6 +1,19 @@
 'use client'
 
 import { BRAND } from '@/lib/constants/theme'
+import dynamic from 'next/dynamic'
+ 
+     // dynamic import بدون SSR — يمنع تحميل Tiptap في كل صفحة لا
+     // تستخدمه، ويحل مشاكل hydration المعروفة مع محررات WYSIWYG
+     const RichTextEditor = dynamic(() => import('@/components/shared/RichTextEditor'), {
+       ssr: false,
+       loading: () => (
+         <div style={{ padding: 12, fontSize: 13, color: BRAND.sub, border: `1px solid ${BRAND.border}`, borderRadius: 12 }}>
+           ⏳ جارٍ تحميل المحرر...
+         </div>
+       ),
+     })
+
 import type { QuizQuestion } from '@/types/lesson-quiz'
 
 type Props = {
@@ -172,22 +185,19 @@ export default function QuestionEditor({ index, question, onChange, onRemove }: 
         />
       )}
 
-      <textarea
-        value={question.explanation}
-        onChange={e => onChange({ explanation: e.target.value })}
-        placeholder="شرح الإجابة الصحيحة..."
-        rows={2}
-        style={{
-          width: '100%',
-          padding: 10,
-          borderRadius: BRAND.radiusSm,
-          border: `1px solid ${BRAND.border}`,
-          fontFamily: BRAND.fontBody,
-          fontSize: 13,
-          resize: 'vertical',
-          color: BRAND.text,
-        }}
-      />
+       <div>
+       <label style={{ fontSize: 12, fontWeight: 700, color: BRAND.sub, display: 'block', marginBottom: 6 }}>
+         شرح الإجابة الصحيحة
+       </label>
+       <RichTextEditor
+         content={question.explanation || ''}
+         onChange={(html) => onChange({ explanation: html })}
+         placeholder="شرح الإجابة الصحيحة... (يمكنك استخدام أداة الإعراب 📐)"
+         toolbar="minimal"
+         maxHeight="160px"
+       />
+     </div>
+ 
     </div>
   )
 }

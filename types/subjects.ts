@@ -17,6 +17,8 @@ export type SubjectItem = {
   grade?: string | null
   created_at?: string | null
   offerings: SubjectOffering[]
+  // ── جديد: اسم المعلم المُعيَّن للمادة (من teacher_subjects) ──
+  teacherName?: string | null
 }
 
 export type SubjectFormState = {
@@ -54,7 +56,6 @@ export function formFromSubject(subject: SubjectItem): SubjectFormState {
   }
 }
 
-// ── المراحل والصفوف — مطابقة لـ app/register/page.tsx ─────────
 export const STAGE_GRADES: Record<string, string[]> = {
   'ابتدائي': ['1', '2', '3', '4', '5', '6'],
   'متوسط': ['7', '8', '9'],

@@ -127,14 +127,16 @@ export async function GET(req: NextRequest) {
       }
 
       const enriched = (data || []).map((a) => {
-        const ref = a.content_ref as ContentRef
-        return {
-          ...a,
-          quiz_title: ref?.quiz_id ? quizzesById[ref.quiz_id]?.title ?? null : null,
-          questions_count: ref?.quiz_id ? quizzesById[ref.quiz_id]?.questions_count ?? 0 : 0,
-          target_type: ref?.target_type ?? 'all',
-        }
-      })
+      const ref = a.content_ref as ContentRef
+      return {
+       ...a,
+      quiz_id: ref?.quiz_id ?? null,
+      quiz_title: ref?.quiz_id ? quizzesById[ref.quiz_id]?.title ?? null : null,
+      questions_count: ref?.quiz_id ? quizzesById[ref.quiz_id]?.questions_count ?? 0 : 0,
+      target_type: ref?.target_type ?? 'all',
+      target_ids: ref?.target_ids ?? [],
+    }
+   })
 
       return NextResponse.json({ assignments: enriched })
     }
