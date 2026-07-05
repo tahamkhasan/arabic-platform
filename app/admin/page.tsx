@@ -290,14 +290,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!authorized || !admin) return
-    if (tab !== 'stages' && tab !== 'stats') return
-
     fetch('/api/subjects')
       .then(r => r.json())
       .then(d => setSubjects(d.subjects ?? []))
       .catch(() => {})
   }, [authorized, admin, tab])
-
   useEffect(() => {
     if (!authorized || !admin || tab !== 'signals') return
 
@@ -1343,40 +1340,38 @@ export default function AdminPage() {
             </div>
 
             <div
-              className="admin-stats-grid"
-              style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}
-            >
-              {[
-                { label: 'الطلاب', value: studentsCount, icon: '🎓', color: BRAND.crimson },
-                { label: 'المعلمون', value: teachersCount, icon: '👨‍🏫', color: BRAND.orange },
-                { label: 'انتظار الموافقة', value: pendingCount, icon: '⏳', color: BRAND.red },
-                { label: 'المواد', value: subjects.length, icon: '📚', color: BRAND.deep },
-              ].map(card => (
-                <div
-                  key={card.label}
-                  style={{
-                    background: 'rgba(255,255,255,0.76)',
-                    border: `1px solid ${T.borderCol}`,
-                    borderRadius: BRAND.radiusMd,
-                    padding: 16,
-                    boxShadow: T.shadow,
-                  }}
-                >
-                  <div style={{ fontSize: 24, marginBottom: 6 }}>{card.icon}</div>
-                  <div
-                    style={{
-                      fontSize: 26,
-                      fontWeight: BRAND.weightBlack,
-                      color: card.color,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {card.value}
-                  </div>
-                  <div style={{ fontSize: 12, color: T.subCol }}>{card.label}</div>
-                </div>
-              ))}
-            </div>
+  className="admin-stats-grid"
+  style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, alignContent: 'start' }}
+>
+  {[
+    { label: 'الطلاب', value: studentsCount, icon: '🎓', color: BRAND.crimson },
+    { label: 'المعلمون', value: teachersCount, icon: '👨‍🏫', color: BRAND.orange },
+    { label: 'انتظار الموافقة', value: pendingCount, icon: '⏳', color: BRAND.red },
+    { label: 'المواد', value: subjects.length, icon: '📚', color: BRAND.deep },
+  ].map(card => (
+    <div
+      key={card.label}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'rgba(255,255,255,0.76)',
+        border: `1px solid ${T.borderCol}`,
+        borderRadius: 999,
+        padding: '8px 12px',
+        boxShadow: T.shadow,
+      }}
+    >
+      <span style={{ fontSize: 15, flexShrink: 0 }}>{card.icon}</span>
+      <span style={{ fontSize: 15, fontWeight: BRAND.weightBlack, color: card.color, flexShrink: 0 }}>
+        {card.value}
+      </span>
+      <span style={{ fontSize: 11, color: T.subCol, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {card.label}
+      </span>
+    </div>
+  ))}
+</div>
           </div>
         </section>
 
