@@ -4,7 +4,9 @@ import { requireAdmin, getServiceClient } from '@/lib/server/auth'
 import { extractAllLessonTexts, type LessonExtractedTexts } from '@/lib/ai/extractLessonText'
 import { getTemplate, type ArabicQuizType, type QuizSectionSpec } from '@/lib/ai/arabicQuizTemplates'
 
-export const maxDuration = 300
+// ── 60 = الحد الأقصى المسموح على خطة Vercel Hobby (المجانية) ──
+// كافٍ لأن التوليد المتوازي يستغرق فعلياً ~20-25 ثانية فقط
+export const maxDuration = 60
 
 // ══════════════════════════════════════════════════════════════
 // app/api/quizzes/generate-arabic/route.ts
