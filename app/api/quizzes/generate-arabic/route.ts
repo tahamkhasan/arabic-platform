@@ -1,31 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requireAdmin, getServiceClient } from '@/lib/server/auth'
+import { getServiceClient } from '@/lib/server/auth'
 import { extractAllLessonTexts, type LessonExtractedTexts } from '@/lib/ai/extractLessonText'
 import { getTemplate, type ArabicQuizType, type QuizSectionSpec } from '@/lib/ai/arabicQuizTemplates'
+import { generateJSON } from '@/lib/ai/providers/router'
 
-// ── 60 = الحد الأقصى المسموح على خطة Vercel Hobby (المجانية) ──
-// كافٍ لأن التوليد المتوازي يستغرق فعلياً ~20-25 ثانية فقط
 export const maxDuration = 60
 
-// ══════════════════════════════════════════════════════════════
-// app/api/quizzes/generate-arabic/route.ts
-//
-// ── مُعدَّل: استدعاءات متوازية (Promise.all) بدل استدعاء واحد ──
-// كل قسم من أقسام الاختبار (فهم/بلاغة/نحو/تلخيص/تعبير) يُولَّد
-// باستدعاء Anthropic مستقل، تُشغَّل جميعها بالتوازي.
-//
-// الفائدة:
-//  - القصير (3 أقسام): ~20 ثانية بدل ~45 ثانية
-//  - النهائي (5 أقسام، 25+ سؤال): ~25 ثانية بدل ~120 ثانية → لا 502
-//
-// كل استدعاء:
-//  - max_tokens: 1500 (كافٍ لقسم واحد، يضمن عدم الاقتطاع)
-//  - timeout: 55 ثانية (دون مهلة proxy البالغة 60 ثانية)
-//  - يُرجع JSON لقسم واحد فقط، أسهل تحليلاً وأسرع توليداً
-// ══════════════════════════════════════════════════════════════
-
-// ── جلب نص النموذج الاحتذائي من إعدادات المنصة (key-value) ────
 async function fetchTemplateText(quizType: ArabicQuizType): Promise<string | null> {
   try {
     const supabase = getServiceClient()
@@ -41,7 +22,7 @@ async function fetchTemplateText(quizType: ArabicQuizType): Promise<string | nul
     return null
   }
 }
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
+
 const SECTION_TIMEOUT_MS = 55_000
 
 interface GenerateArabicBody {
@@ -73,7 +54,6 @@ function buildLessonsTextBlock(lessons: LessonExtractedTexts[]): string {
   ].join('\n\n')).join('\n\n---\n\n')
 }
 
-// ── تعليمات ثابتة لكل قسم — قواعد المعلم الدائمة ──────────────
 const SECTION_RULES: Record<string, string> = {
   comprehension: `
 ## تعليمات إلزامية لأسئلة الفهم والاستيعاب والثروة اللغوية:
@@ -100,16 +80,20 @@ const SECTION_RULES: Record<string, string> = {
 - كل سؤال يطلب بيان أثر الصورة أو المحسّن في المعنى، لا مجرد التسمية.`,
 }
 
-// ── توليد قسم واحد باستدعاء مستقل ──────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// ── مُعدَّل: بدل استدعاء fetch لـ Anthropic مباشرة + إصلاح
+// JSON يدوياً هنا، الآن يستدعي generateJSON() من الراوتر
+// الموحَّد. Claude أولاً، Gemini احتياطياً تلقائياً، وإصلاح
+// JSON بات مشتركاً مع كل نقاط الاستدعاء الأخرى في المنصة. ──
+// ══════════════════════════════════════════════════════════════
 async function generateSection(
   section: QuizSectionSpec,
   lessonsText: string,
   grade: string | undefined,
   quizType: ArabicQuizType,
-  templateText: string | null   // ← نموذج احتذائي اختياري
-): Promise<{ key: string; title: string; points: number; questions: unknown[] }> {
+  templateText: string | null
+): Promise<{ key: string; title: string; points: number; questions: unknown[]; provider: string }> {
 
-  // ── إضافة النموذج الاحتذائي إن وُجد ─────────────────────────
   const templateBlock = templateText
     ? `\n\n## نموذج اختبار سابق للاستئناس (اتبع أسلوبه وصياغته ومستواه):\n${templateText}\n---\nالآن أنشئ قسم "${section.title}" بنفس الأسلوب والصياغة، لكن بمحتوى مختلف مبني على الدروس أدناه.\n`
     : ''
@@ -148,65 +132,20 @@ ${section.subQuestions.map((sq, i) => `${i + 1}. ${sq}`).join('\n')}`
 
   const userPrompt = `## محتوى الدروس المقررة:\n\n${lessonsText}`
 
-  const controller = new AbortController()
-  const timeoutId  = setTimeout(() => controller.abort(), SECTION_TIMEOUT_MS)
-
   try {
-    const apiRes = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-5',
-        // 4000 لكل قسم — الأقسام تعمل بالتوازي لذا الوقت الإجمالي
-        // يساوي وقت أبطأ قسم وليس المجموع (~20-25 ثانية)
-        max_tokens: 4000,
-        system:     systemPrompt,
-        messages:   [{ role: 'user', content: userPrompt }],
-      }),
-      signal: controller.signal,
+    const { data: parsed, providerUsed } = await generateJSON<any>({
+      systemPrompt,
+      userPrompt,
+      maxTokens: 4000,
+      timeoutMs: SECTION_TIMEOUT_MS,
     })
-    clearTimeout(timeoutId)
 
-    const apiData = await apiRes.json()
-    if (!apiRes.ok) throw new Error(apiData.error?.message || 'Anthropic API error')
-
-    const rawText = apiData.content?.[0]?.text || '{}'
-    const cleaned = rawText.replace(/```json|```/g, '').trim()
-
-    let parsed: any
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
-      // ── محاولة إصلاح JSON المقتطع (قد يحدث إن اكتملت التوكنز) ──
-      // نحاول إغلاق كل الأقواس المفتوحة لاستعادة ما تم توليده
-      let repaired = cleaned
-      // أغلق السلاسل المفتوحة
-      const quoteCount = (repaired.match(/"/g) || []).length
-      if (quoteCount % 2 !== 0) repaired += '"'
-      // أغلق الكائنات والمصفوفات المفتوحة
-      const opens: Record<string, string> = { '{': '}', '[': ']' }
-      const stack: string[] = []
-      for (const ch of repaired) {
-        if (ch === '{' || ch === '[') stack.push(opens[ch])
-        else if (ch === '}' || ch === ']') stack.pop()
-      }
-      repaired += stack.reverse().join('')
-      try {
-        parsed = JSON.parse(repaired)
-        console.warn(`قسم "${section.key}" جرى إصلاح JSON المقتطع — بعض الأسئلة قد تكون ناقصة.`)
-      } catch {
-        console.error(`قسم "${section.key}" — JSON غير قابل للإصلاح:\n`, cleaned.slice(0, 500))
-        throw new Error(`تعذّر تحليل رد قسم "${section.title}" — زِد max_tokens أو أعد المحاولة.`)
-      }
-    }
-
-    // ضمان وجود الحقول الأساسية
     if (!parsed.questions || !Array.isArray(parsed.questions)) {
       throw new Error(`القسم "${section.title}" لم يُرجع مصفوفة أسئلة صالحة.`)
+    }
+
+    if (providerUsed === 'gemini') {
+      console.warn(`⚠️ قسم "${section.title}" وُلِّد عبر Gemini الاحتياطي (فشل Claude أو بلوغ الحد اليومي).`)
     }
 
     return {
@@ -214,19 +153,13 @@ ${section.subQuestions.map((sq, i) => `${i + 1}. ${sq}`).join('\n')}`
       title:     parsed.title     ?? section.title,
       points:    parsed.points    ?? section.defaultPoints,
       questions: parsed.questions,
+      provider:  providerUsed,
     }
   } catch (err: any) {
-    clearTimeout(timeoutId)
-    if (err?.name === 'AbortError') {
-      throw new Error(`انتهت مهلة توليد قسم "${section.title}" — حاول مرة أخرى.`)
-    }
-    throw err
+    throw new Error(err?.message || `تعذّر توليد قسم "${section.title}".`)
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// POST
-// ══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '') ?? null
   if (!token) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
@@ -257,7 +190,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // ── جلب بيانات الدروس ─────────────────────────────────────
     const { data: lessonRows, error: lessonsError } = await supabaseAdmin
       .from('lessons')
       .select('id, name, comprehension_file_url, tharwa_file_url, balagha_file_url, nahw_file_url')
@@ -272,7 +204,6 @@ export async function POST(req: NextRequest) {
       .map(id => lessonRows.find(l => l.id === id))
       .filter(Boolean) as typeof lessonRows
 
-    // ── التحقق من اكتمال الملفات ──────────────────────────────
     const missingFiles: string[] = []
     for (const l of orderedLessons) {
       if (!l.comprehension_file_url) missingFiles.push(`${l.name}: فهم واستيعاب`)
@@ -287,10 +218,9 @@ export async function POST(req: NextRequest) {
       }, { status: 422 })
     }
 
-    // ── استخراج النصوص من الملفات بالتوازي ───────────────────
     const [extractedLessons, templateText] = await Promise.all([
       Promise.all(orderedLessons.map(l => extractAllLessonTexts(l))),
-      fetchTemplateText(quizType),   // ← جلب النموذج الاحتذائي بالتوازي
+      fetchTemplateText(quizType),
     ])
     const lessonsTextBlock = buildLessonsTextBlock(extractedLessons)
 
@@ -300,7 +230,6 @@ export async function POST(req: NextRequest) {
       console.log(`ℹ️ لا يوجد نموذج احتذائي (${quizType}) — سيُولَّد بالقالب الافتراضي`)
     }
 
-    // ── توليد كل قسم باستدعاء مستقل — جميعها بالتوازي ──────────
     const template = getTemplate(quizType)
 
     const sectionResults = await Promise.all(
@@ -314,9 +243,12 @@ export async function POST(req: NextRequest) {
       sections:  sectionResults,
     }
 
+    const usedFallback = sectionResults.some(s => s.provider === 'gemini')
+
     return NextResponse.json({
       quiz:        quizDraft,
       lessonsUsed: orderedLessons.map(l => ({ id: l.id, name: l.name })),
+      ...(usedFallback ? { notice: 'استُخدم الذكاء الاصطناعي الاحتياطي (Gemini) لبعض أقسام هذا الاختبار.' } : {}),
     })
 
   } catch (err: any) {

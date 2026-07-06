@@ -52,6 +52,13 @@ export default function AdminSettingsPage() {
   const [uploadingShort, setUploadingShort] = useState(false)
   const [uploadingFinal, setUploadingFinal] = useState(false)
 
+  // ── جديد: الذكاء الاصطناعي الاحتياطي (Claude + Gemini) ────────
+  const [aiDailyLimit,     setAiDailyLimit]     = useState(0)        // 0 = بلا حد
+  const [aiUsageToday,     setAiUsageToday]     = useState(0)
+  const [aiLimitInput,     setAiLimitInput]     = useState('')
+  const [loadingAiProvider,setLoadingAiProvider]= useState(false)
+  const [savingAiProvider, setSavingAiProvider] = useState(false)
+
   async function getAccessToken() {
     const { data:{session}, error } = await supabase.auth.getSession()
     if (error || !session?.access_token) return null
@@ -97,6 +104,39 @@ export default function AdminSettingsPage() {
       if (data?.short) setShortTemplate(data.short)
       if (data?.final) setFinalTemplate(data.final)
     } catch {}
+  }
+
+  // ── جديد: تحميل حالة الذكاء الاصطناعي الاحتياطي ──────────────
+  async function loadAiProvider() {
+    try {
+      setLoadingAiProvider(true)
+      const accessToken = await getAccessToken()
+      if (!accessToken) return
+      const res  = await fetch('/api/platform-settings/ai-provider', { headers:{ Authorization:`Bearer ${accessToken}` } })
+      const data = await res.json().catch(()=>null)
+      if (res.ok && data) {
+        setAiDailyLimit(data.dailyLimit || 0)
+        setAiUsageToday(data.usageToday || 0)
+        setAiLimitInput(data.dailyLimit ? String(data.dailyLimit) : '')
+      }
+    } catch {} finally { setLoadingAiProvider(false) }
+  }
+
+  async function saveAiLimit() {
+    try {
+      setSavingAiProvider(true); setMessage('')
+      const accessToken = await getAccessToken()
+      if (!accessToken) { setFatalError('انتهت الجلسة. أعد تسجيل الدخول.'); return }
+      const limit = aiLimitInput.trim() === '' ? 0 : Number(aiLimitInput)
+      if (!Number.isFinite(limit) || limit < 0) { setMessage('❌ قيمة الحد اليومي غير صالحة'); return }
+      const res  = await fetch('/api/platform-settings/ai-provider', { method:'PATCH', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${accessToken}` }, body:JSON.stringify({ dailyLimit: limit }) })
+      const data = await res.json().catch(()=>null)
+      if (!res.ok) throw new Error(data?.error || 'فشل حفظ الحد اليومي')
+      setAiDailyLimit(data.dailyLimit || 0)
+      setMessage('✅ تم حفظ حد الذكاء الاصطناعي'); setTimeout(()=>setMessage(''), 2500)
+    } catch (error:any) {
+      setMessage(`❌ ${error?.message || 'تعذر حفظ الحد اليومي'}`)
+    } finally { setSavingAiProvider(false) }
   }
 
   async function toggleSemester(which:1|2) {
@@ -202,7 +242,7 @@ export default function AdminSettingsPage() {
         if (appUser.role !== 'admin') { if (appUser.user_type==='student') router.replace('/student'); else router.replace('/dashboard'); return }
         localStorage.setItem('mosaed_user', JSON.stringify(appUser))
         setAdmin(appUser)
-        await loadSettings(); await loadSemesters(); await loadTemplates()
+        await loadSettings(); await loadSemesters(); await loadTemplates(); await loadAiProvider()
       } catch (error:any) {
         localStorage.removeItem('mosaed_user')
         if (mounted) setFatalError(error?.message || 'فشل التحقق من جلسة الأدمن')
@@ -324,6 +364,46 @@ export default function AdminSettingsPage() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ── جديد: الذكاء الاصطناعي الاحتياطي (Claude + Gemini) ── */}
+        <section style={{ background:T.cardBg, borderRadius:BRAND.radiusXl, border:`1px solid ${T.borderCol}`, boxShadow:T.shadow, padding:22, marginBottom:18 }}>
+          <h2 style={{ fontSize:18, fontWeight:BRAND.weightBlack, fontFamily:BRAND.fontHeading, marginBottom:6, color:BRAND.crimson }}>🔀 الذكاء الاصطناعي الاحتياطي</h2>
+          <p style={{ fontSize:13, color:T.subCol, lineHeight:1.8, marginBottom:18 }}>
+            Claude هو المحرك الأساسي دائماً لكل أدوات التوليد (شرح، خطط، اختبارات، أوراق عمل، ألعاب، ودردشة الطالب).
+            عند انقطاع الاتصال به، أو تعطّله، أو بلوغ الحد اليومي أدناه، تتحوّل المنصة تلقائياً إلى Gemini كمزوّد احتياطي بنفس الدقة والتعليمات.
+          </p>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:16 }}>
+            <div style={{ padding:'14px 16px', borderRadius:BRAND.radiusMd, border:`1.5px solid ${T.borderCol}`, background:T.inputBg }}>
+              <div style={{ fontSize:12, color:T.subCol, marginBottom:4 }}>استدعاءات Claude اليوم</div>
+              <div style={{ fontSize:22, fontWeight:BRAND.weightBlack, color:T.textCol }}>
+                {loadingAiProvider ? '...' : aiUsageToday}
+                {aiDailyLimit > 0 && <span style={{ fontSize:14, color:T.subCol, fontWeight:BRAND.weightBold }}> / {aiDailyLimit}</span>}
+              </div>
+            </div>
+            <div style={{ padding:'14px 16px', borderRadius:BRAND.radiusMd, border:`1.5px solid ${aiDailyLimit>0 && aiUsageToday>=aiDailyLimit ? 'rgba(220,100,40,0.35)' : 'rgba(5,150,105,0.3)'}`, background: aiDailyLimit>0 && aiUsageToday>=aiDailyLimit ? 'rgba(220,100,40,0.08)' : 'rgba(5,150,105,0.06)' }}>
+              <div style={{ fontSize:12, color:T.subCol, marginBottom:4 }}>حالة المزوّد الآن</div>
+              <div style={{ fontSize:15, fontWeight:BRAND.weightBlack, color: aiDailyLimit>0 && aiUsageToday>=aiDailyLimit ? BRAND.orange : '#059669' }}>
+                {aiDailyLimit>0 && aiUsageToday>=aiDailyLimit ? '⚠️ Gemini (الحد مُستنفَد)' : '✅ Claude نشط'}
+              </div>
+            </div>
+          </div>
+
+          <label style={{ display:'grid', gap:7, maxWidth:360 }}>
+            <span style={{ fontSize:13, color:T.subCol, fontWeight:BRAND.weightBold }}>الحد اليومي لاستدعاءات Claude (0 = بلا حد)</span>
+            <div style={{ display:'flex', gap:8 }}>
+              <input
+                type="number" min={0} value={aiLimitInput}
+                onChange={e=>setAiLimitInput(e.target.value)}
+                placeholder="مثال: 500"
+                style={{ ...inputStyle, direction:'ltr', textAlign:'right' }}
+              />
+              <button type="button" onClick={saveAiLimit} disabled={savingAiProvider} style={{ ...primaryBtn, flexShrink:0 }}>
+                {savingAiProvider ? '...' : '💾 حفظ'}
+              </button>
+            </div>
+          </label>
         </section>
 
         <div className="hero-grid" style={{ display:'grid', gridTemplateColumns:'1.2fr 0.8fr', gap:16, marginBottom:18 }}>

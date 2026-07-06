@@ -6,6 +6,7 @@ export type GuardMode =
   | 'admin'
   | 'teacher'
   | 'student'
+  | 'parent'
 
 export type AppRoute =
   | '/login'
@@ -13,6 +14,7 @@ export type AppRoute =
   | '/admin'
   | '/teacher'
   | '/student'
+  | '/parent'
   | '/dashboard'
 
 export function isPendingUser(user: AppUser | null): boolean {
@@ -39,6 +41,10 @@ export function isStudentUser(user: AppUser | null): boolean {
   return !!user && user.user_type === 'student'
 }
 
+export function isParentUser(user: AppUser | null): boolean {
+  return !!user && (user.user_type === 'parent' || user.role === 'parent')
+}
+
 export function resolveBlockedUserRoute(user: AppUser | null): AppRoute | null {
   if (!user) return null
   if (isBlockedUser(user)) return '/pending-approval'
@@ -54,6 +60,7 @@ export function resolveUserHome(user: AppUser | null): AppRoute {
   if (isAdminUser(user)) return '/admin'
   if (isStudentUser(user)) return '/student'
   if (isTeacherUser(user)) return '/teacher'
+  if (isParentUser(user)) return '/parent'
 
   return '/dashboard'
 }
@@ -68,6 +75,7 @@ export function canAccessGuard(user: AppUser | null, mode: GuardMode): boolean {
   if (mode === 'admin') return isAdminUser(user)
   if (mode === 'teacher') return isTeacherUser(user)
   if (mode === 'student') return isStudentUser(user)
+  if (mode === 'parent') return isParentUser(user)
 
   return false
 }
@@ -99,6 +107,10 @@ export function resolveRedirectForGuard(
   }
 
   if (mode === 'student' && !isStudentUser(user)) {
+    return resolveUserHome(user)
+  }
+
+  if (mode === 'parent' && !isParentUser(user)) {
     return resolveUserHome(user)
   }
 

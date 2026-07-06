@@ -22,6 +22,8 @@ import {
   TrackKey,
 } from '@/lib/constants/stages'
 
+import { AddParentModal } from '@/components/admin/ParentManager'
+
 const T = {
   bg: BRAND.bg,
   cardBg: BRAND.bgSoft,
@@ -178,9 +180,10 @@ export default function AdminPage() {
 
   const [showAddTeacher, setShowAddTeacher] = useState(false)
   const [showAddStudent, setShowAddStudent] = useState(false)
+  const [showAddParent, setShowAddParent] = useState(false)
   const [assignSubjectsFor, setAssignSubjectsFor] = useState<User | null>(null)
   const [assignScopeFor, setAssignScopeFor] = useState<User | null>(null)
-
+ 
   const [signals, setSignals] = useState<PlatformSignal[]>([])
   const [signalsLoading, setSignalsLoading] = useState(false)
   const [resolvingSignalId, setResolvingSignalId] = useState<string | null>(null)
@@ -1273,6 +1276,14 @@ export default function AdminPage() {
 
             <Button variant="ghost" size="sm" onClick={() => router.push('/admin/generator')}>
               ✨ أدوات التوليد
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={() => router.push('/admin/delegations')}>
+              🗂️ التفويضات
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={() => setShowAddParent(true)}>
+              👨‍👦 ولي أمر جديد
             </Button>
 
             <Button variant="danger" size="sm" onClick={handleLogout}>
@@ -2544,17 +2555,29 @@ export default function AdminPage() {
       ) : null}
 
       {showAddTeacher ? (
-        <AddTeacherModal
-          accessToken={adminAccessToken ?? ''}
-          onClose={() => setShowAddTeacher(false)}
-          onCreated={() => {
-            setShowAddTeacher(false)
-            void reloadUsers()
-            setActionMsg('✅ تمت إضافة المعلم.')
-            setTimeout(() => setActionMsg(''), 2500)
-          }}
-        />
-      ) : null}
+              <AddTeacherModal
+                accessToken={adminAccessToken ?? ''}
+                onClose={() => setShowAddTeacher(false)}
+                onCreated={() => {
+                  setShowAddTeacher(false)
+                  void reloadUsers()
+                  setActionMsg('✅ تمت إضافة المعلم.')
+                  setTimeout(() => setActionMsg(''), 2500)
+                }}
+              />
+            ) : null}
+
+            {showAddParent ? (
+              <AddParentModal
+                accessToken={adminAccessToken ?? ''}
+                onClose={() => setShowAddParent(false)}
+                onCreated={() => {
+                  setShowAddParent(false)
+                  setActionMsg('✅ تم إنشاء حساب ولي الأمر.')
+                  setTimeout(() => setActionMsg(''), 2500)
+                }}
+              />
+            ) : null}
 
       {showAddStudent ? (
         <AddStudentModal

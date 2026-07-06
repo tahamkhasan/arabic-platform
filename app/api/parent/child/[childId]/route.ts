@@ -46,25 +46,30 @@ export async function GET(
     }
 
     // 3. تحقق أن هذا الابن مربوط بولي الأمر
-    const { data: link } = await supabaseAdmin
+    const { data: link, error: linkError } = await supabaseAdmin
       .from('parent_children')
-      .select('id, relation')
+      .select('relation')
       .eq('parent_id', userData.id)
       .eq('child_id', childId)
       .maybeSingle();
+
+    if (linkError) {
+      console.error('Link check error:', linkError);
+      return error('تعذّر التحقق من الربط', 500);
+    }
 
     if (!link) {
       return error('هذا الطالب غير مربوط بحسابك', 403);
     }
 
     // 4. بيانات الطالب الأساسية
-    const { data: child } = await supabaseAdmin
+    const { data: child, error: childError } = await supabaseAdmin
       .from('users')
-      .select('id, full_name, grade, stage, status, created_at')
+      .select('id, full_name, allowed_grades, allowed_stages, status, created_at')
       .eq('id', childId)
       .single();
 
-    if (!child) {
+    if (childError || !child) {
       return error('الطالب غير موجود', 404);
     }
 
@@ -143,16 +148,6 @@ export async function GET(
     const avgAssignmentScore = (submissions?.filter((s: any) => s.score !== null)
       ?.reduce((s: number, sub: any) => s + sub.score, 0) ?? 0) / (totalGraded || 1);
 
-    // المهام المتأخرة (لم تُسلَّم بعد)
-    const { data: overdueAssignments } = await supabaseAdmin
-      .from('assignments')
-      .select('id, title, type, due_date')
-      .eq('class_id', link.id) // قد لا يعمل لأن المهام لا ترتبط بـ parent_children مباشرة
-      .lt('due_date', new Date().toISOString())
-      .is('deleted_at', null)
-      .order('due_date', { ascending: true })
-      .limit(5);
-
     // 9. الإنجازات
     const { data: achievements } = await supabaseAdmin
       .from('student_achievements')
@@ -207,8 +202,8 @@ export async function GET(
       child: {
         id: child.id,
         full_name: child.full_name,
-        grade: child.grade,
-        stage: child.stage,
+       grade: child.allowed_grades?.[0] ?? null,
+       stage: child.allowed_stages?.[0] ?? null,
         relation: link.relation,
         relation_label:
           link.relation === 'father' ? 'الأب' :

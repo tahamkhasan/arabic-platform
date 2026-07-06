@@ -3,6 +3,9 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
+import { signOutApp } from '@/lib/auth/auth.session'
+import { supabase } from '@/lib/supabase'
+import { useRouteGuard } from '@/hooks/useRouteGuard'
 
 // ---- أنواع البيانات ----
 interface ChildSummary {
@@ -142,7 +145,6 @@ function ScoreBar({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' | 
     </div>
   )
 }
-
 // ---- بطاقة إحصائية ----
 function StatCard({ icon, label, value, color, bgColor }: {
   icon: string
@@ -463,20 +465,24 @@ function ParentContent() {
   const [activeTab, setActiveTab] = useState<'overview' | 'detail' | 'notifications'>('overview')
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [linkChildId, setLinkChildId] = useState('')
-  const [linkRelation, setLinkRelation] = useState<'father' | 'mother' | 'guarder'>('father')
+  const [linkRelation, setLinkRelation] = useState<'father' | 'mother' | 'guardian'>('father')
   const [linkError, setLinkError] = useState('')
 
-  const getToken = () => {
-    try {
-      const u = localStorage.getItem('user')
-      if (!u) return null
-      return JSON.parse(u)?.token || null
-    } catch { return null }
-  }
+  const [accessToken, setAccessToken] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.access_token) setAccessToken(data.session.access_token)
+    })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAccessToken(session?.access_token ?? '')
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
 
   // جلب الأبناء
   useEffect(() => {
-    const token = getToken()
+    const token = accessToken
     if (!token) return
 
     fetch('/api/parent/children', {
@@ -489,28 +495,28 @@ function ParentContent() {
         }
       })
       .catch(err => console.error('Error fetching children:', err))
-  }, [getToken])
+  }, [accessToken])
 
   // جلب تفاصيل الطالب عند اختياره
   useEffect(() => {
-    if (!selectedChildId || !getToken()) {
+    if (!selectedChildId || !accessToken) {
       setChildDetail(null)
       return
     }
 
     fetch(`/api/parent/child/${selectedChildId}?period=30`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` },
+      headers: { 'Authorization': `Bearer ${accessToken}` },
     })
       .then(r => r.json())
       .then(data => {
         if (data.success) setChildDetail(data.data)
       })
       .catch(err => console.error('Error fetching child detail:', err))
-  }, [selectedChildId, getToken])
+  }, [selectedChildId, accessToken])
 
   // جلب الإشعارات
   useEffect(() => {
-    const token = getToken()
+    const token = accessToken
     if (!token) return
 
     fetch('/api/parent/notifications', {
@@ -523,7 +529,7 @@ function ParentContent() {
         }
       })
       .catch(err => console.error('Error fetching notifications:', err))
-  }, [getToken])
+  }, [accessToken])
 
   // اختيار طالب
   const selectChild = (id: string) => {
@@ -531,9 +537,17 @@ function ParentContent() {
     setActiveTab('detail')
   }
 
+  // helper to get current token (used by some handlers)
+  const getToken = () => accessToken
+
+  const handleLogout = async () => {
+    await signOutApp()
+    router.replace('/login')
+  }
+
   // ربط ابن جديد
   const handleLinkSubmit = async () => {
-    const token = getToken()
+    const token = accessToken
     if (!token || !linkChildId) return
 
     setLinkError('')
@@ -550,7 +564,6 @@ function ParentContent() {
           relation: linkRelation,
         }),
       })
-
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || 'فشل الربط')
@@ -651,22 +664,41 @@ function ParentContent() {
             بوابة ولي الأمر
           </h1>
         </div>
-        <button
-          onClick={() => setShowLinkModal(true)}
-          style={{
-            background: T.primary,
-            'color': '#fff',
-            'border': 'none',
-            borderRadius: 8,
-            padding: '8px 16px',
-            fontFamily: 'Cairo, sans-serif',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          + ربط ابن
-        </button>
+       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowLinkModal(true)}
+            style={{
+              background: T.primary,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              fontFamily: 'Cairo, sans-serif',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            + ربط ابن
+          </button>
+
+          <button
+            onClick={handleLogout}
+            style={{
+              background: 'transparent',
+              color: T.primary,
+              border: '1.5px solid ' + T.borderCol,
+              borderRadius: 8,
+              padding: '8px 16px',
+              fontFamily: 'Cairo, sans-serif',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            🚪 خروج
+          </button>
+        </div>
       </div>
 
       <div style={{
@@ -1664,6 +1696,8 @@ function ParentContent() {
 
 // ===== الصفحة مع Suspense =====
 export default function ParentPage() {
+  const { user: parentUser, accessToken, loading: guardLoading, authorized } = useRouteGuard('parent')
+
   return (
     <Suspense fallback={
       <div style={{

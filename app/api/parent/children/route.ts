@@ -10,7 +10,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { success, error } from '@/lib/api-response';
 import { z } from 'zod';
 
-// ---- شكل ربط ابن ----
 const linkChildSchema = z.object({
   child_id: z.string().uuid('معرّف الابن غير صالح'),
   relation: z.enum(['father', 'mother', 'guardian']).default('father'),
@@ -20,7 +19,6 @@ function getFirstErrorMessage(err: z.ZodError) {
   return err.issues?.[0]?.message || 'بيانات غير صحيحة';
 }
 
-// ---- دالة مساعدة ----
 async function getUser(token: string) {
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
   if (authError || !user) return null;
@@ -33,10 +31,8 @@ async function getUser(token: string) {
   return userData;
 }
 
-// ===== GET: قائمة الأبناء =====
 export async function GET(req: NextRequest) {
   try {
-    // 1. تحقق من المستخدم
     const authHeader = req.headers.get('authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) return error('غير مصرح', 401);
@@ -48,7 +44,6 @@ export async function GET(req: NextRequest) {
       return error('هذا المسار لأولياء الأمور فقط', 403);
     }
 
-    // 2. جلب الأبناء المرتبطين
     const { data: links, error: linksError } = await supabaseAdmin
       .from('parent_children')
       .select('child_id, relation')
@@ -66,25 +61,30 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. جلب بيانات كل ابن
     const childIds = links.map((l: any) => l.child_id);
 
-    const { data: children } = await supabaseAdmin
+    // ── مُصحَّح: users لا تملك عمودي grade/stage المفردين —
+    // الأعمدة الفعلية هي allowed_grades/allowed_stages (مصفوفات).
+    // الاستعلام القديم كان يطلب عمودين غير موجودين، فيفشل الاستعلام
+    // بصمت (لأن الخطأ لم يكن يُتحقَّق منه)، فتعود دائماً مصفوفة فارغة. ──
+    const { data: children, error: childrenError } = await supabaseAdmin
       .from('users')
-      .select('id, full_name, email, grade, stage, status, created_at')
+      .select('id, full_name, email, allowed_grades, allowed_stages, status, created_at')
       .in('id', childIds);
 
-    // 4. لبنِ خريطة الربط
+    if (childrenError) {
+      console.error('Error fetching children details:', childrenError);
+      return error('فشل جلب بيانات الأبناء', 500);
+    }
+
     const relationMap: Record<string, string> = {};
     for (const l of links) {
       relationMap[l.child_id] = l.relation;
     }
 
-    // 5. لكل ابن: احسب متوسط درجاته
     const childData: Array<any> = [];
 
     for (const child of (children || [])) {
-      // متوسط درجات الاختبارات
       const { data: attempts } = await supabaseAdmin
         .from('quiz_attempts')
         .select('score')
@@ -96,20 +96,17 @@ export async function GET(req: NextRequest) {
         ? Math.round(scores.reduce((s: number, n: number) => s + n, 0) / scores.length)
         : null;
 
-      // عدد المهام المُسلَّمة
       const { count: submittedCount } = await supabaseAdmin
         .from('assignment_submissions')
         .select('id', { count: 'exact', head: true })
         .eq('student_id', child.id);
 
-      // عدد المهام المُصحَّحة
       const { count: gradedCount } = await supabaseAdmin
         .from('assignment_submissions')
         .select('id', { count: 'exact', head: true })
         .eq('student_id', child.id)
         .not('score', 'is', null);
 
-      // آخر نشاط (آخر محاولة اختبار أو تسليم مهمة)
       let lastActivity: string | null = null;
 
       const { data: lastAttempt } = await supabaseAdmin
@@ -124,7 +121,6 @@ export async function GET(req: NextRequest) {
         lastActivity = lastAttempt.started_at;
       }
 
-      // عدد الإنجازات
       const { count: achievementCount } = await supabaseAdmin
         .from('student_achievements')
         .select('id', { count: 'exact', head: true })
@@ -133,8 +129,8 @@ export async function GET(req: NextRequest) {
       childData.push({
         id: child.id,
         full_name: child.full_name,
-        grade: child.grade,
-        stage: child.stage,
+        grade: child.allowed_grades?.[0] ?? null,
+        stage: child.allowed_stages?.[0] ?? null,
         status: child.status,
         relation: relationMap[child.id] || 'father',
         relation_label:
@@ -161,7 +157,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ===== POST: ربط ابن =====
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -175,7 +170,6 @@ export async function POST(req: NextRequest) {
       return error('فقط أولياء الأمور يمكنهم ربط أبناء', 403);
     }
 
-    // تحقق من البيانات
     const body = await req.json();
     const validation = linkChildSchema.safeParse(body);
     if (!validation.success) {
@@ -184,7 +178,6 @@ export async function POST(req: NextRequest) {
 
     const { child_id, relation } = validation.data;
 
-    // تحقق أن الابن موجود وهو طالب
     const { data: child } = await supabaseAdmin
       .from('users')
       .select('id, role, status, full_name')
@@ -203,7 +196,6 @@ export async function POST(req: NextRequest) {
       return error('حساب هذا الطالب غير معتمد بعد', 400);
     }
 
-    // تحقق أنه غير مربوط مسبقاً
     const { data: existing } = await supabaseAdmin
       .from('parent_children')
       .select('id')
@@ -215,7 +207,6 @@ export async function POST(req: NextRequest) {
       return error('هذا الطالب مربوط بحسابك مسبقاً', 400, 'ALREADY_LINKED');
     }
 
-    // أنشئ الربط
     const { error: insertError } = await supabaseAdmin
       .from('parent_children')
       .insert({
@@ -229,7 +220,6 @@ export async function POST(req: NextRequest) {
       return error('فشل ربط الطالب', 500);
     }
 
-    // أرسل إشعار لولي الأمر
     await supabaseAdmin.from('notifications').insert({
       user_id: userData.id,
       type: 'system',
@@ -249,7 +239,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ===== DELETE: فك ربط ابن =====
 export async function DELETE(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
