@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
+import { STAGE_LABELS, GRADES_BY_STAGE, type StageKey } from '@/lib/constants/stages'
 import Button from '@/components/ui/Button'
 
 const B = {
@@ -47,13 +48,12 @@ type Subject = {
 
 type PickType = 'package' | 'subject'
 
-const STAGE_LABELS: Record<string, string> = {
-  primary: 'ابتدائي',
-  ابتدائي: 'ابتدائي',
-  middle: 'متوسط',
-  متوسط: 'متوسط',
-  secondary: 'ثانوي',
-  ثانوي: 'ثانوي',
+// ── قبول القيم الإنجليزية الحديثة والعربية القديمة معاً عند الفلترة،
+// حماية من بيانات قديمة لم تُهاجَر بعد (نفس نمط CurriculumExplorer) ──
+const STAGE_ALIASES: Record<StageKey, string[]> = {
+  primary: ['primary', 'ابتدائي'],
+  middle: ['middle', 'متوسط'],
+  secondary: ['secondary', 'ثانوي'],
 }
 
 const TRACK_LABELS: Record<string, string> = {
@@ -65,7 +65,7 @@ const TRACK_LABELS: Record<string, string> = {
 
 function describeScope(stage?: string | null, grade?: string | null, track?: string | null): string {
   const parts: string[] = []
-  if (stage) parts.push(STAGE_LABELS[stage] ?? stage)
+  if (stage) parts.push(STAGE_LABELS[stage as StageKey] ?? stage)
   if (grade) parts.push(`الصف ${grade}`)
   if (track) parts.push(TRACK_LABELS[track] ?? track)
   return parts.join(' — ')
@@ -95,6 +95,9 @@ export default function PlanPicker() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedType, setSelectedType] = useState<PickType | null>(null)
 
+  const [selectedStage, setSelectedStage] = useState<StageKey | null>(null)
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
+
   useEffect(() => {
     let mounted = true
     setLoading(true)
@@ -117,6 +120,31 @@ export default function PlanPicker() {
     }
   }, [])
 
+  function chooseStage(stage: StageKey) {
+    setSelectedStage(stage)
+    setSelectedGrade(null)
+    setSelectedId(null)
+    setSelectedType(null)
+  }
+
+  function chooseGrade(grade: string) {
+    setSelectedGrade(grade)
+    setSelectedId(null)
+    setSelectedType(null)
+  }
+
+  const filteredPackages = useMemo(() => {
+    if (!selectedStage || !selectedGrade) return []
+    const aliases = STAGE_ALIASES[selectedStage]
+    return packages.filter(p => p.stage && aliases.includes(p.stage) && p.grade === selectedGrade)
+  }, [packages, selectedStage, selectedGrade])
+
+  const filteredSubjects = useMemo(() => {
+    if (!selectedStage || !selectedGrade) return []
+    const aliases = STAGE_ALIASES[selectedStage]
+    return subjects.filter(s => s.stage && aliases.includes(s.stage) && s.grade === selectedGrade)
+  }, [subjects, selectedStage, selectedGrade])
+
   function selectPlan(type: PickType, id: string) {
     setSelectedType(type)
     setSelectedId(id)
@@ -127,34 +155,84 @@ export default function PlanPicker() {
     router.push(`/register?type=${selectedType}&id=${selectedId}`)
   }
 
-  const hasPackages = packages.length > 0
-  const hasSubjects = subjects.length > 0
+  const hasPackages = filteredPackages.length > 0
+  const hasSubjects = filteredSubjects.length > 0
+  const bothChosen = !!selectedStage && !!selectedGrade
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 32, flexWrap: 'wrap' }}>
-        <Button
-          type="button"
-          variant={tab === 'package' ? 'primary' : 'secondary'}
-          size="md"
-          title="عرض الباقات"
-          onClick={() => setTab('package')}
-        >
-          📦 الباقات
-        </Button>
-
-        <Button
-          type="button"
-          variant={tab === 'subject' ? 'primary' : 'secondary'}
-          size="md"
-          title="عرض المواد المستقلة"
-          onClick={() => setTab('subject')}
-        >
-          📚 مواد مستقلة
-        </Button>
+      {/* الخطوة ①: اختيار المرحلة */}
+      <div style={{ textAlign: 'center', marginBottom: 22 }}>
+        <div style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: B.sub, marginBottom: 14, fontFamily: BODY }}>
+          ① اختر المرحلة الدراسية
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {(Object.keys(STAGE_LABELS) as StageKey[]).map(stage => {
+            const active = selectedStage === stage
+            return (
+              <button
+                key={stage}
+                onClick={() => chooseStage(stage)}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: BRAND.radiusPill,
+                  border: `1.5px solid ${active ? B.crimson : B.border}`,
+                  background: active ? `${B.crimson}14` : 'rgba(255,255,255,0.65)',
+                  color: active ? B.crimson : B.sub,
+                  fontWeight: active ? BRAND.weightBold : BRAND.weightSemibold,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  fontFamily: BODY,
+                  transition: 'all 0.18s',
+                }}
+              >
+                {STAGE_LABELS[stage]}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {loading ? (
+      {/* الخطوة ②: اختيار الصف — تظهر فقط بعد اختيار المرحلة */}
+      {selectedStage && (
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: B.sub, marginBottom: 14, fontFamily: BODY }}>
+            ② اختر الصف
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {GRADES_BY_STAGE[selectedStage].map(g => {
+              const active = selectedGrade === g.id
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => chooseGrade(g.id)}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: BRAND.radiusPill,
+                    border: `1.5px solid ${active ? B.crimson : B.border}`,
+                    background: active ? `${B.crimson}14` : 'rgba(255,255,255,0.65)',
+                    color: active ? B.crimson : B.sub,
+                    fontWeight: active ? BRAND.weightBold : BRAND.weightSemibold,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: BODY,
+                    transition: 'all 0.18s',
+                  }}
+                >
+                  {g.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* رسالة انتظار قبل اكتمال الاختيار */}
+      {!bothChosen ? (
+        <p style={{ textAlign: 'center', color: B.sub, fontFamily: BODY, padding: '16px 0 8px' }}>
+          {!selectedStage ? 'اختر المرحلة أعلاه للمتابعة.' : 'اختر الصف أعلاه لعرض الباقات والمواد المتاحة.'}
+        </p>
+      ) : loading ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: B.sub, fontFamily: BODY }}>
           <div
             style={{
@@ -171,6 +249,28 @@ export default function PlanPicker() {
         </div>
       ) : (
         <>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 32, flexWrap: 'wrap' }}>
+            <Button
+              type="button"
+              variant={tab === 'package' ? 'primary' : 'secondary'}
+              size="md"
+              title="عرض الباقات"
+              onClick={() => setTab('package')}
+            >
+              📦 الباقات
+            </Button>
+
+            <Button
+              type="button"
+              variant={tab === 'subject' ? 'primary' : 'secondary'}
+              size="md"
+              title="عرض المواد المستقلة"
+              onClick={() => setTab('subject')}
+            >
+              📚 مواد مستقلة
+            </Button>
+          </div>
+
           {tab === 'package' &&
             (hasPackages ? (
               <div
@@ -181,7 +281,7 @@ export default function PlanPicker() {
                   marginBottom: 28,
                 }}
               >
-                {packages.map(pkg => {
+                {filteredPackages.map(pkg => {
                   const active = selectedType === 'package' && selectedId === pkg.id
 
                   return (
@@ -247,7 +347,7 @@ export default function PlanPicker() {
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub, fontFamily: BODY }}>
-                لا توجد باقات متاحة حالياً — جرّب تبويب "مواد مستقلة".
+                لا توجد باقات متاحة لهذا الصف — جرّب تبويب "مواد مستقلة".
               </div>
             ))}
 
@@ -261,7 +361,7 @@ export default function PlanPicker() {
                   marginBottom: 28,
                 }}
               >
-                {subjects.map(subj => {
+                {filteredSubjects.map(subj => {
                   const active = selectedType === 'subject' && selectedId === subj.id
 
                   return (
@@ -310,7 +410,7 @@ export default function PlanPicker() {
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: B.sub, fontFamily: BODY }}>
-                لا توجد مواد مستقلة متاحة حالياً — جرّب تبويب "الباقات".
+                لا توجد مواد مستقلة متاحة لهذا الصف — جرّب تبويب "الباقات".
               </div>
             ))}
 

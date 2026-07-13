@@ -8,7 +8,7 @@ import {
        StageKey,
        TrackKey,
      } from '@/lib/constants/stages'
-  
+
 // ──────────────────────────────────────────────────────────────
 // components/admin/TeacherManager.tsx (جديد)
 //
@@ -475,21 +475,16 @@ export function AssignSubjectsModal({
 }
 
 // ════════════════════════════════════════════════════════════
-// مودال تخصيص نطاقات التدريس لمعلم (مرحلة + صف + تشعيب)
+// مودال تخصيص نطاقات التدريس لمعلم (مرحلة + صف + تشعيب + مادة)
 // ════════════════════════════════════════════════════════════
-// يُلصَق هذا المكوّن في نفس ملف components/admin/TeacherManager.tsx
-// (بعد AssignSubjectsModal مباشرة)، ويستخدم نفس الـimports الموجودة
-// فعلياً في أعلى الملف (useEffect, useState, BRAND) — لا حاجة
-// لاستيرادات إضافية باستثناء STAGE_LABELS/GRADES_BY_STAGE/TRACK_LABELS
-// من lib/constants/stages، المُضافة في أعلى هذا المقتطف فقط للوضوح.
-//
-// الطلاب يُحسَبون تلقائياً (عبر students_count من الـAPI) — لا اختيار
-// يدوي لأي طالب بالاسم، تماشياً مع التصميم المتَّفق عليه: الأدمن
-// يُخصِّص نطاقاً (مرحلة+صف+تشعيب)، والمنصة تُطابق الطلاب تلقائياً.
+// ── مُعدَّل: أُضيفت خطوة رابعة إلزامية "المادة" — كانت الواجهة
+// سابقاً تُنشئ نطاقات بـ subject_id: null دائماً رغم أن الـAPI
+// يدعمها منذ البداية، فتظهر بطاقات "مادة غير محدَّدة" في صفحة
+// المعلم ولا تُعرض له أي مادة في /dashboard (لأن الفلترة هناك
+// تعتمد الآن حصراً على وجود subject_id). المادة الآن مطلوبة عند
+// إنشاء أي نطاق جديد، وتُجلَب فقط مواد هذه المرحلة/الصف تحديداً
+// (باستخدام subject_offerings عبر GET /api/subjects). ──────────
 // ════════════════════════════════════════════════════════════
-
-// (STAGE_LABELS, GRADES_BY_STAGE, TRACK_LABELS, StageKey, TrackKey)
-// are already imported at the top of this file; avoid duplicate import here.
 
 interface TeacherScope {
   id: string
@@ -500,6 +495,13 @@ interface TeacherScope {
   subjects?: { name: string } | null
   students_count: number
   created_at: string
+}
+
+interface ScopeSubjectOption {
+  id: string
+  name: string
+  icon?: string
+  offerings?: { stage: string; grade: string; track: string | null }[]
 }
 
 export function AssignScopeModal({
@@ -522,8 +524,13 @@ export function AssignScopeModal({
   const [newStage, setNewStage] = useState<StageKey | null>(null)
   const [newGrade, setNewGrade] = useState<string | null>(null)
   const [newTrack, setNewTrack] = useState<TrackKey | null>(null)
+  const [newSubjectId, setNewSubjectId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
+
+  // ── مواد متاحة للمرحلة/الصف/التشعيب المختار حالياً ────────────
+  const [allSubjectsRaw, setAllSubjectsRaw] = useState<ScopeSubjectOption[]>([])
+  const [subjectsLoading, setSubjectsLoading] = useState(false)
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -552,10 +559,35 @@ export function AssignScopeModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherId])
 
+  // ── جلب كل المواد (بعروضها) مرة واحدة عند فتح نموذج الإضافة ────
+  useEffect(() => {
+    if (!showAddForm || allSubjectsRaw.length > 0) return
+    setSubjectsLoading(true)
+    fetch('/api/subjects')
+      .then(r => r.json())
+      .then(d => setAllSubjectsRaw(d?.subjects ?? []))
+      .catch(() => setAllSubjectsRaw([]))
+      .finally(() => setSubjectsLoading(false))
+  }, [showAddForm, allSubjectsRaw.length])
+
+  // ── فلترة المواد المتاحة فعلياً لهذه المرحلة/الصف/التشعيب ──────
+  const availableSubjects = allSubjectsRaw.filter(s => {
+    if (!newStage || !newGrade) return false
+    const offerings = s.offerings ?? []
+    if (offerings.length === 0) return false
+    return offerings.some(o => {
+      if (o.stage !== newStage || o.grade !== newGrade) return false
+      const needsTrack = newGrade === '11' || newGrade === '12'
+      if (!needsTrack) return true
+      return o.track === newTrack || o.track === null
+    })
+  })
+
   function resetAddForm() {
     setNewStage(null)
     setNewGrade(null)
     setNewTrack(null)
+    setNewSubjectId(null)
     setAddError('')
     setShowAddForm(false)
   }
@@ -568,6 +600,10 @@ export function AssignScopeModal({
     const needsTrack = newGrade === '11' || newGrade === '12'
     if (needsTrack && !newTrack) {
       setAddError('هذا الصف يتطلب تحديد التشعيب (علمي/أدبي).')
+      return
+    }
+    if (!newSubjectId) {
+      setAddError('اختر المادة التي سيُدرِّسها المعلم لهذا النطاق.')
       return
     }
 
@@ -585,6 +621,7 @@ export function AssignScopeModal({
           stage: newStage,
           grade: newGrade,
           track: needsTrack ? newTrack : null,
+          subject_id: newSubjectId,
         }),
       })
       const data = await res.json().catch(() => null)
@@ -670,7 +707,8 @@ export function AssignScopeModal({
         </div>
 
         <p style={{ fontSize: 12, color: T.sub, marginBottom: 16, lineHeight: 1.8 }}>
-          كل طالب مسجَّل بنفس المرحلة/الصف/التشعيب يظهر تلقائياً ضمن طلاب هذا المعلم — بلا تحديد أسماء. المعلم يستطيع لاحقاً تقسيم طلابه لمجموعات فرعية بحسب المستوى من صفحته الخاصة.
+          كل طالب مسجَّل بنفس المرحلة/الصف/التشعيب يظهر تلقائياً ضمن طلاب هذا المعلم — بلا تحديد أسماء. حدِّد أيضاً المادة
+          حتى تظهر له في لوحة التوليد وصفحة "إدارة المادة" الخاصة به.
         </p>
 
         {error && (
@@ -719,7 +757,8 @@ export function AssignScopeModal({
                           📚 {STAGE_LABELS[scope.stage]} • الصف {scope.grade}
                           {scope.track && needsTrackLabel ? ` • ${TRACK_LABELS[scope.track]}` : ''}
                         </span>
-                        <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>
+                        <div style={{ fontSize: 12, color: scope.subject_id ? T.sub : BRAND.crimson, marginTop: 2, fontWeight: scope.subject_id ? 400 : 700 }}>
+                          {scope.subjects?.name ? `📘 ${scope.subjects.name} • ` : scope.subject_id ? '' : '⚠️ مادة غير محدَّدة • '}
                           👥 {scope.students_count} طالب مطابق حالياً
                         </div>
                       </div>
@@ -792,7 +831,7 @@ export function AssignScopeModal({
                   {(Object.keys(STAGE_LABELS) as StageKey[]).map(stage => (
                     <button
                       key={stage}
-                      onClick={() => { setNewStage(stage); setNewGrade(null); setNewTrack(null) }}
+                      onClick={() => { setNewStage(stage); setNewGrade(null); setNewTrack(null); setNewSubjectId(null) }}
                       style={{
                         padding: '8px 14px',
                         borderRadius: 999,
@@ -817,7 +856,7 @@ export function AssignScopeModal({
                       {GRADES_BY_STAGE[newStage].map(g => (
                         <button
                           key={g.id}
-                          onClick={() => { setNewGrade(g.id); setNewTrack(null) }}
+                          onClick={() => { setNewGrade(g.id); setNewTrack(null); setNewSubjectId(null) }}
                           style={{
                             padding: '8px 14px',
                             borderRadius: 999,
@@ -844,7 +883,7 @@ export function AssignScopeModal({
                       {(Object.keys(TRACK_LABELS) as TrackKey[]).map(t => (
                         <button
                           key={t}
-                          onClick={() => setNewTrack(t)}
+                          onClick={() => { setNewTrack(t); setNewSubjectId(null) }}
                           style={{
                             padding: '8px 16px',
                             borderRadius: 999,
@@ -864,20 +903,64 @@ export function AssignScopeModal({
                   </>
                 )}
 
+                {newStage && newGrade && (!(newGrade === '11' || newGrade === '12') || newTrack) && (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.sub, marginBottom: 8 }}>المادة</div>
+                    {subjectsLoading ? (
+                      <div style={{ fontSize: 13, color: T.sub, marginBottom: 14 }}>⏳ جارٍ تحميل المواد...</div>
+                    ) : availableSubjects.length === 0 ? (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: BRAND.crimson,
+                          marginBottom: 14,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: 'rgba(140,20,40,0.06)',
+                        }}
+                      >
+                        لا توجد مواد مُعرَّفة لهذه المرحلة/الصف بعد — أضِفها أولاً من "إدارة المواد".
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                        {availableSubjects.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setNewSubjectId(s.id)}
+                            style={{
+                              padding: '8px 14px',
+                              borderRadius: 999,
+                              border: newSubjectId === s.id ? `2px solid ${BRAND.crimson}` : `1px solid ${T.border}`,
+                              background: newSubjectId === s.id ? 'rgba(140,20,40,0.08)' : 'transparent',
+                              color: newSubjectId === s.id ? BRAND.crimson : T.text,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              fontSize: 13,
+                            }}
+                          >
+                            {s.icon ?? '📘'} {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button
                     onClick={handleAddScope}
-                    disabled={adding || !newStage || !newGrade}
+                    disabled={adding || !newStage || !newGrade || !newSubjectId}
                     style={{
                       flex: 1,
                       padding: '11px',
                       borderRadius: 10,
                       border: 'none',
-                      background: (adding || !newStage || !newGrade) ? T.border : BRAND.gradMain,
+                      background: (adding || !newStage || !newGrade || !newSubjectId) ? T.border : BRAND.gradMain,
                       color: '#fff',
                       fontWeight: 900,
                       fontSize: 14,
-                      cursor: (adding || !newStage || !newGrade) ? 'not-allowed' : 'pointer',
+                      cursor: (adding || !newStage || !newGrade || !newSubjectId) ? 'not-allowed' : 'pointer',
                       fontFamily: 'inherit',
                     }}
                   >

@@ -80,15 +80,20 @@ export async function GET(req: NextRequest) {
     const stages    = searchParams.get('stages')
 
     if (teacherId) {
-      const { data: assigned, error: assignedError } = await supabaseAdmin
-        .from('teacher_subjects')
+      // ── مُعدَّل: المصدر الموحَّد الآن teacher_scopes (مرحلة+صف+مادة
+      // محدَّدة من الأدمن)، بدل teacher_subjects القديم الذي لا يرتبط
+      // بأي سياق مرحلة/صف — نفس المصدر المستخدَم في تبويب "إدارة
+      // المادة" بصفحة المعلم، لضمان تطابق تام بين الصفحتين. ────────
+      const { data: scopes, error: scopesError } = await supabaseAdmin
+        .from('teacher_scopes')
         .select('subject_id')
         .eq('teacher_id', teacherId)
+        .not('subject_id', 'is', null)
 
-      if (assignedError)
+      if (scopesError)
         return NextResponse.json({ error: 'فشل جلب مواد المعلم.' }, { status: 500 })
 
-      const subjectIds = (assigned || []).map(r => r.subject_id)
+      const subjectIds = Array.from(new Set((scopes || []).map(r => r.subject_id as string)))
       if (subjectIds.length === 0) return NextResponse.json({ subjects: [] })
 
       const { data: subjects, error: subjectsError } = await supabaseAdmin

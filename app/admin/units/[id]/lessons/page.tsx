@@ -2,7 +2,7 @@
 import { Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import LessonsPageView from '@/components/lessons/LessonsPageView'
-import { useAdminGuard } from '@/hooks/useAdminGuard'
+import { useSubjectContentGuard } from '@/hooks/useSubjectContentGuard'
 import { useLessonsPage } from '@/hooks/useLessonsPage'
 
 // ══════════════════════════════════════════════════════════════
@@ -17,9 +17,10 @@ function AdminUnitLessonsContent() {
   const unitId = params.id
   const unitName = searchParams.get('unitName') || 'الوحدة'
   const subjectName = searchParams.get('subjectName') || ''
+  const subjectId = searchParams.get('subjectId')
   const isArabic = subjectName.includes('اللغة العربية')
 
-  const { ready, accessToken, guardError } = useAdminGuard()
+  const { ready, accessToken, guardError } = useSubjectContentGuard(subjectId)
 
   const {
     lessons,
@@ -76,7 +77,7 @@ function AdminUnitLessonsContent() {
           padding: 24,
         }}
       >
-        جارٍ التحقق من صلاحيات الأدمن...
+        جارٍ التحقق من الصلاحيات...
       </div>
     )
   }

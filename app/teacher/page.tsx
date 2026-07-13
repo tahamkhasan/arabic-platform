@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
+
 import { TeacherPageHeader } from '@/components/TeacherPageHeader'
 import { TeacherSectionsRenderer } from '@/components/TeacherSectionsRenderer'
 import { TeacherModalsContainer } from '@/components/TeacherModalsContainer'
+import { TeacherSidebar } from '@/components/TeacherSidebar'
 
 import { useTeacherPageController } from '../../hooks/useTeacherPageController'
 import { useTeacherPageStyles } from '../../hooks/useTeacherPageStyles'
@@ -11,6 +14,8 @@ import type { TeacherPageViewModel } from '@/types/teacher-page.types'
 
 export default function TeacherPage() {
   const controller = useTeacherPageController()
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isHome, setIsHome] = useState(true)
 
   const styles = useTeacherPageStyles({
     ui: controller.ui,
@@ -24,6 +29,12 @@ export default function TeacherPage() {
   const vm: TeacherPageViewModel = {
     ...controller,
     styles,
+    isHome,
+  } as TeacherPageViewModel & { isHome: boolean }
+
+  function handleTabChange(id: any) {
+    setIsHome(false)
+    controller.setTab(id)
   }
 
   return (
@@ -38,13 +49,40 @@ export default function TeacherPage() {
         `,
         color: controller.ui.text,
         fontFamily: controller.BRAND.fontBody,
-        paddingBottom: 96,
       }}
     >
       <style>{styles.pageCss}</style>
+      <style>{`
+        .teacher-app-shell { display: flex; min-height: 100vh; }
+        .teacher-sidebar { display: flex; }
+        .teacher-mobile-nav { display: none; }
+        @media (max-width: 900px) {
+          .teacher-sidebar { display: none !important; }
+          .teacher-mobile-nav { display: flex !important; }
+          .teacher-main-area { padding-bottom: 96px !important; }
+        }
+      `}</style>
 
       <TeacherPageHeader vm={vm} />
-      <TeacherSectionsRenderer vm={vm} />
+
+      <div className="teacher-app-shell">
+        <TeacherSidebar
+          tabs={vm.tabs}
+          tab={vm.tab}
+          isHome={isHome}
+          onSelectHome={() => setIsHome(true)}
+          onTabChange={handleTabChange}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(v => !v)}
+          onGoQuizBank={() => vm.router.push('/teacher/quizzes')}
+          ui={vm.ui}
+          userId={vm.user?.id ?? ''}
+        />
+
+        <div className="teacher-main-area" style={{ flex: 1, minWidth: 0 }}>
+          <TeacherSectionsRenderer vm={vm} />
+        </div>
+      </div>
 
       <TeacherModalsContainer
         controller={vm}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin, getServiceClient } from '@/lib/server/auth'
+import { requireAdminOrSubjectTeacher } from '@/lib/server/subjectContentAuth'
 
 type Context = {
   params: Promise<{ id: string }>
@@ -51,11 +52,12 @@ async function uploadFile(supabase: any, file: File, prefix: string): Promise<st
 // بشكل مستقل عبر علم remove<X>File
 // ══════════════════════════════════════════════════════════════
 export async function PATCH(req: NextRequest, context: Context) {
-  const auth = await requireAdmin(req)
+  // need the lesson id to check subject-level permissions
+  const { id } = await context.params
+  const auth = await requireAdminOrSubjectTeacher(req, id)
   if (!auth.ok) return auth.response
 
   try {
-    const { id } = await context.params
     const formData = await req.formData()
 
     const name        = getStr(formData, 'name')

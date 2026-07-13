@@ -1,278 +1,259 @@
 'use client'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { User, RoleItem } from '@/types/admin.types'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { AdminUserItem } from '@/types/users-admin'
+export function useAdminUsers(params: {
+  authorized: boolean
+  admin: any
+  adminAccessToken: string | null
+  tab: string
+  router: any
+  setActionMsg: (msg: string) => void
+}) {
+  const { authorized, admin, adminAccessToken, tab, router, setActionMsg } = params
 
-type RoleOption = {
-  id: string
-  name: string
-  key?: string
-  is_active?: boolean
-  [key: string]: unknown
-}
-
-type UseAdminUsersArgs = {
-  enabled?: boolean
-}
-
-export function useAdminUsers({ enabled = true }: UseAdminUsersArgs = {}) {
-  const router = useRouter()
-
-  const [users, setUsers] = useState<AdminUserItem[]>([])
-  const [roles, setRoles] = useState<RoleOption[]>([])
-
-  const [usersLoading, setUsersLoading] = useState(true)
+  const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<RoleItem[]>([])
+  const [loading, setLoading] = useState(false)
   const [rolesLoading, setRolesLoading] = useState(false)
-  const [assigningRole, setAssigningRole] = useState(false)
-
-  const [msg, setMsg] = useState('')
-  const [search, setSearch] = useState('')
-
-  const [roleModalOpen, setRoleModalOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(null)
-  const [selectedRoleId, setSelectedRoleId] = useState('')
-
-  async function getAccessToken() {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession()
-
-    if (error || !session?.access_token) {
-      router.replace('/login')
-      return null
-    }
-
-    return session.access_token
-  }
-
-  async function loadUsers(token?: string) {
-    try {
-      setUsersLoading(true)
-      const accessToken = token || (await getAccessToken())
-      if (!accessToken) return
-
-      const res = await fetch('/api/users', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر تحميل المستخدمين.')
-      }
-
-      setUsers(Array.isArray(data?.items) ? data.items : [])
-    } catch (error: any) {
-      setMsg(error?.message || 'حدث خطأ أثناء تحميل المستخدمين.')
-    } finally {
-      setUsersLoading(false)
-    }
-  }
-
-  async function loadRoles(token?: string) {
-    try {
-      setRolesLoading(true)
-      const accessToken = token || (await getAccessToken())
-      if (!accessToken) return
-
-      const res = await fetch('/api/roles', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر تحميل الأدوار.')
-      }
-
-      const items = Array.isArray(data?.items) ? data.items : []
-      setRoles(items.filter((role: RoleOption) => role.is_active !== false))
-    } catch (error: any) {
-      setMsg(error?.message || 'حدث خطأ أثناء تحميل الأدوار.')
-    } finally {
-      setRolesLoading(false)
-    }
-  }
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending'>('all')
+  const [searchQ, setSearchQ] = useState('')
 
   useEffect(() => {
-    if (!enabled) return
+    if (!authorized || !admin) return
+    if (tab !== 'students' && tab !== 'teachers') return
+
     let mounted = true
 
-    async function boot() {
-      const accessToken = await getAccessToken()
-      if (!accessToken || !mounted) return
+    async function loadUsers() {
+      try {
+        setLoading(true)
+        setActionMsg('')
 
-      await Promise.all([loadUsers(accessToken), loadRoles(accessToken)])
+        if (!adminAccessToken) {
+          throw new Error('انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.')
+        }
+
+        const response = await fetch('/api/users', {
+          headers: { Authorization: `Bearer ${adminAccessToken}` },
+        })
+
+        const text = await response.text()
+        let data: any = null
+
+        try {
+          data = text ? JSON.parse(text) : null
+        } catch {
+          throw new Error(text || 'استجابة غير صالحة من الخادم')
+        }
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.replace('/login')
+          }
+          throw new Error(data?.error || 'فشل في جلب المستخدمين')
+        }
+
+        if (!mounted) return
+        setUsers(data?.items ?? [])
+      } catch (error: any) {
+        if (!mounted) return
+        setActionMsg(`❌ ${error?.message || 'حدث خطأ غير متوقع'}`)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
-    boot()
+    void loadUsers()
 
     return () => {
       mounted = false
     }
-  }, [enabled])
+  }, [authorized, admin, adminAccessToken, tab, router, setActionMsg])
 
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return users
+  useEffect(() => {
+    if (!authorized || !admin) return
+    if (tab !== 'students' && tab !== 'teachers') return
 
-    return users.filter((user) =>
-      [
-        user.email,
-        user.full_name,
-        user.role,
-        user.user_type,
-        user.assigned_role?.name,
-        user.assigned_role?.key,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
-    )
-  }, [users, search])
+    let mounted = true
 
-  function openRoleModal(user: AdminUserItem) {
-    setSelectedUser(user)
-    setSelectedRoleId(user.assigned_role_id || '')
-    setRoleModalOpen(true)
-  }
+    async function loadRoles() {
+      try {
+        setRolesLoading(true)
 
-  function closeRoleModal() {
-    if (assigningRole) return
-    setRoleModalOpen(false)
-    setSelectedUser(null)
-    setSelectedRoleId('')
-  }
+        if (!adminAccessToken) {
+          throw new Error('انتهت الجلسة. سجل الدخول مرة أخرى.')
+        }
 
-  async function assignRoleToUser() {
-    if (!selectedUser) return
+        const res = await fetch('/api/roles', {
+          headers: { Authorization: `Bearer ${adminAccessToken}` },
+        })
 
-    if (!selectedRoleId) {
-      setMsg('اختر دورًا أولًا.')
-      return
+        const data = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(data?.error || 'تعذر تحميل الأدوار.')
+        if (!mounted) return
+
+        setRoles((data?.items || []).filter((r: RoleItem) => r?.is_active !== false))
+      } catch (error: any) {
+        if (!mounted) return
+        setActionMsg(`❌ ${error?.message || 'تعذر تحميل الأدوار.'}`)
+      } finally {
+        if (mounted) setRolesLoading(false)
+      }
     }
 
+    void loadRoles()
+
+    return () => {
+      mounted = false
+    }
+  }, [authorized, admin, adminAccessToken, tab, setActionMsg])
+
+  const reloadUsers = useCallback(async () => {
     try {
-      setAssigningRole(true)
-      setMsg('')
+      if (!adminAccessToken) return
 
-      const accessToken = await getAccessToken()
-      if (!accessToken) return
-
-      const res = await fetch('/api/users/assign-role', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          roleId: selectedRoleId,
-        }),
+      const response = await fetch('/api/users', {
+        headers: { Authorization: `Bearer ${adminAccessToken}` },
       })
 
-      const data = await res.json().catch(() => null)
+      const data = await response.json().catch(() => null)
+      if (response.ok) setUsers(data?.items ?? [])
+    } catch {}
+  }, [adminAccessToken])
 
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر تعيين الدور.')
+  const updateUser = useCallback(
+    async (userId: string, updates: Record<string, any>) => {
+      try {
+        if (!adminAccessToken) {
+          router.replace('/login')
+          setActionMsg('انتهت الجلسة. يرجى تسجيل الدخول من جديد.')
+          return
+        }
+
+        const res = await fetch('/api/users', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminAccessToken}`,
+          },
+          body: JSON.stringify({ userId, ...updates }),
+        })
+
+        const data = await res.json().catch(() => null)
+
+        if (res.ok) {
+          setActionMsg('تم تحديث المستخدم بنجاح.')
+          setTimeout(() => setActionMsg(''), 2500)
+          setUsers(prev => prev.map(u => (u.id === userId ? { ...u, ...updates } : u)))
+        } else {
+          if (res.status === 401) {
+            router.replace('/login')
+            return
+          }
+          setActionMsg(data?.error || 'فشل تحديث المستخدم.')
+        }
+      } catch (error: any) {
+        setActionMsg(error?.message || 'حدث خطأ أثناء تحديث المستخدم.')
+      }
+    },
+    [adminAccessToken, router, setActionMsg],
+  )
+
+  const deleteUser = useCallback(
+    async (userId: string) => {
+      if (!adminAccessToken) {
+        router.replace('/login')
+        setActionMsg('انتهت الجلسة. يرجى تسجيل الدخول من جديد.')
+        return
       }
 
-      const updatedUser = data?.item as AdminUserItem | undefined
+      try {
+        setLoading(true)
+        setActionMsg('')
 
-      if (updatedUser) {
-        setUsers((prev) =>
-          prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
-        )
-      } else {
-        await loadUsers(accessToken)
+        const res = await fetch('/api/users', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminAccessToken}`,
+          },
+          body: JSON.stringify({ userId }),
+        })
+
+        const data = await res.json().catch(() => null)
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            router.replace('/login')
+            return
+          }
+          setActionMsg(data?.error || 'فشل حذف المستخدم.')
+          return
+        }
+
+        setUsers(prev => prev.filter(u => u.id !== userId))
+        setActionMsg('✅ تم حذف المستخدم بنجاح.')
+        setTimeout(() => setActionMsg(''), 2500)
+      } catch (error: any) {
+        setActionMsg(error?.message || 'حدث خطأ أثناء حذف المستخدم.')
+      } finally {
+        setLoading(false)
       }
+    },
+    [adminAccessToken, router, setActionMsg],
+  )
 
-      setMsg('تم تعيين الدور للمستخدم بنجاح.')
-      closeRoleModal()
-      setTimeout(() => setMsg(''), 2500)
-    } catch (error: any) {
-      setMsg(error?.message || 'حدث خطأ أثناء تعيين الدور.')
-    } finally {
-      setAssigningRole(false)
-    }
+  const studentUsers = useMemo(() => users.filter(u => u.user_type === 'student'), [users])
+  const teacherUsers = useMemo(
+    () => users.filter(u => u.user_type === 'teacher' || u.role === 'teacher'),
+    [users],
+  )
+
+  function filterList(list: User[]) {
+    return list.filter(u => {
+      const displayName = u.full_name || u.name || u.email || ''
+      const q = searchQ.trim().toLowerCase()
+      const email = (u.email || '').toLowerCase()
+
+      const matchSearch =
+        !q ||
+        displayName.toLowerCase().includes(q) ||
+        email.includes(q) ||
+        (u.assigned_role?.name || '').toLowerCase().includes(q) ||
+        (u.assigned_role?.key || '').toLowerCase().includes(q)
+
+      const matchFilter = statusFilter === 'all' ? true : u.status === 'pending'
+      return matchSearch && matchFilter
+    })
   }
 
-  async function removeAssignedRole() {
-    if (!selectedUser) return
+  const filteredStudents = useMemo(() => filterList(studentUsers), [studentUsers, searchQ, statusFilter])
+  const filteredTeachers = useMemo(() => filterList(teacherUsers), [teacherUsers, searchQ, statusFilter])
 
-    try {
-      setAssigningRole(true)
-      setMsg('')
-
-      const accessToken = await getAccessToken()
-      if (!accessToken) return
-
-      const res = await fetch('/api/users/assign-role', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-        }),
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر إزالة الدور.')
-      }
-
-      const updatedUser = data?.item as AdminUserItem | undefined
-
-      if (updatedUser) {
-        setUsers((prev) =>
-          prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
-        )
-      } else {
-        await loadUsers(accessToken)
-      }
-
-      setMsg('تمت إزالة الدور من المستخدم بنجاح.')
-      closeRoleModal()
-      setTimeout(() => setMsg(''), 2500)
-    } catch (error: any) {
-      setMsg(error?.message || 'حدث خطأ أثناء إزالة الدور.')
-    } finally {
-      setAssigningRole(false)
-    }
-  }
+  const pendingCount = users.filter(u => u.status === 'pending').length
+  const studentsCount = studentUsers.length
+  const teachersCount = teacherUsers.length
 
   return {
     users,
+    setUsers,
     roles,
-    usersLoading,
+    loading,
     rolesLoading,
-    assigningRole,
-    msg,
-    search,
-    setSearch,
-    filteredUsers,
-
-    roleModalOpen,
-    selectedUser,
-    selectedRoleId,
-    setSelectedRoleId,
-
-    loadUsers,
-    loadRoles,
-    openRoleModal,
-    closeRoleModal,
-    assignRoleToUser,
-    removeAssignedRole,
+    statusFilter,
+    setStatusFilter,
+    searchQ,
+    setSearchQ,
+    studentUsers,
+    teacherUsers,
+    filteredStudents,
+    filteredTeachers,
+    pendingCount,
+    studentsCount,
+    teachersCount,
+    reloadUsers,
+    updateUser,
+    deleteUser,
   }
 }

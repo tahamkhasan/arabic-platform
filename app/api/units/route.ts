@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminOrSubjectTeacher } from '@/lib/server/subjectContentAuth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { requireAdmin, getServiceClient } from '@/lib/server/auth'
 
@@ -37,9 +38,6 @@ export async function GET(req: NextRequest) {
 // محمي بـ requireAdmin (Bearer token)
 // ══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req)
-  if (!auth.ok) return auth.response
-
   try {
     const body = await req.json()
     const { subject_id, subjectId, name, description, order_num, icon, semester } = body as {
@@ -53,6 +51,9 @@ export async function POST(req: NextRequest) {
     }
 
     const finalSubjectId = subject_id || subjectId
+
+    const auth = await requireAdminOrSubjectTeacher(req, finalSubjectId || null)
+    if (!auth.ok) return auth.response
 
     if (!finalSubjectId) {
       return NextResponse.json({ error: 'المادة (subject_id) مطلوبة.' }, { status: 400 })

@@ -441,23 +441,27 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" ref={setRef('features') as any} className="section">
+      <section id="roles" ref={setRef('roles') as any} className="section">
         <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: 52, ...anim('features') }}>
+          <div style={{ textAlign: 'center', marginBottom: 52, ...anim('roles') }}>
+            <div className="tiny-label" style={{ marginBottom: 18 }}>
+              <span className="dot" />
+              ثلاثة محاور، منصة واحدة
+            </div>
             <h2 style={{ fontSize: 38, fontWeight: 900, fontFamily: HEADING, marginBottom: 12 }}>
-              ما الذي تقدّمه مِدَاد؟
+              صُممت لمن؟
             </h2>
             <p
               style={{
                 fontSize: 16,
                 color: B.sub,
-                maxWidth: 540,
+                maxWidth: 520,
                 margin: '0 auto',
                 lineHeight: 1.9,
                 fontFamily: BODY,
               }}
             >
-              ثلاثة محاور أساسية تخدم المُعَلِّم والمُتَعَلِّم
+              مِدَاد تَخدم المعلمََ والمتعلمَ، وتتوسع لتشملَ الإدارة المدرسية
             </p>
           </div>
 
@@ -465,64 +469,69 @@ export default function LandingPage() {
             {[
               {
                 icon: '💡',
+                title: 'للمعلّم',
                 c: B.crimson,
-                num: '01',
-                title: 'الشروح والخطط وأوراق العمل',
-                desc: 'للمعلم أدوات جاهزة لإعداد الشرح والخطة والأنشطة التعليمية بطريقة أسرع وأكثر تنظيماً.',
+                desc: 'إعداد أسرع للشرح والخطة والاختبار مع مخرجات قابلة للتصدير مباشرة.',
+                pts: ['شرح وخطط وأوراق عمل فورية', 'إرسال مهام وتصحيحها بسرعة', 'تحليلات أداء واضحة لكل طالب'],
               },
               {
                 icon: '🎯',
-                c: B.orange,
-                num: '02',
-                title: 'الاختبارات والتدريبات التفاعلية',
-                desc: 'للمتعلم تجربة تعينك على الفهم من خلال التطبيق، لا مجرد قراءة جامدة أو حفظ مباشر.',
+                title: 'للمتعلّم',
+                c: B.amber,
+                desc: 'تدريب مستمر وتجربة تفاعلية تعينك على الفهم بالتطبيق، لا الحفظ المباشر.',
+                pts: ['شرح مخصص لكل درس', 'اختبارات وبطاقات حفظ تفاعلية', 'تتبع الدرجات والتقدم أولاً بأول'],
               },
               {
                 icon: '📊',
+                title: 'للمدرسة',
                 c: B.deep,
-                num: '03',
-                title: 'متابعة دقيقة لتقدم الطالب وتطور مستواه',
-                desc: 'التقييم والتغذية الراجعة ومتابعة أثر التعلم تجتمع في مكان واحد لدعم القرار.',
+                desc: 'هيكل منظم لإدارة المحتوى والاختبارات، ومتابعة دقيقة لأثر التعلم.',
+                pts: ['إدارة المعلمين والطلاب من مكان واحد', 'تقارير أداء شاملة', 'محتوى موحّد ومنظم لكل المراحل'],
               },
-            ].map((f, i) => (
+            ].map((r, i) => (
               <div
-                key={f.title}
-                id={`f${i}`}
-                ref={setRef(`f${i}`) as any}
+                key={r.title}
+                id={`r${i}`}
+                ref={setRef(`r${i}`) as any}
                 className="card"
-                style={{ borderRadius: 24, padding: 28, ...anim(`f${i}`, i * 0.1) }}
+                style={{ borderRadius: 24, padding: 28, ...anim(`r${i}`, i * 0.1) }}
               >
                 <div
                   style={{
+                    width: 54,
+                    height: 54,
+                    borderRadius: 15,
+                    background: `${r.c}14`,
+                    border: `1px solid ${r.c}28`,
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: 22,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 26,
+                    marginBottom: 18,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 54,
-                      height: 54,
-                      borderRadius: 15,
-                      background: `${f.c}14`,
-                      border: `1px solid ${f.c}28`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 26,
-                    }}
-                  >
-                    {f.icon}
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: `${f.c}35`, letterSpacing: 2 }}>
-                    {f.num}
-                  </span>
+                  {r.icon}
                 </div>
-                <h3 style={{ fontSize: 19, fontWeight: 900, fontFamily: HEADING, marginBottom: 10 }}>
-                  {f.title}
-                </h3>
-                <p style={{ color: B.sub, lineHeight: 1.9, fontSize: 15, fontFamily: BODY }}>{f.desc}</p>
+                <h3 style={{ fontSize: 20, fontWeight: 900, fontFamily: HEADING, marginBottom: 10 }}>{r.title}</h3>
+                <p style={{ color: B.sub, lineHeight: 1.9, fontSize: 14, marginBottom: 18, fontFamily: BODY }}>
+                  {r.desc}
+                </p>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {r.pts.map(p => (
+                    <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '50%',
+                          background: r.c,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ fontSize: 14, color: B.text, fontFamily: BODY }}>{p}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -609,118 +618,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="roles" ref={setRef('roles') as any} className="section">
-        <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: 52, ...anim('roles') }}>
-            <h2 style={{ fontSize: 38, fontWeight: 900, fontFamily: HEADING, marginBottom: 12 }}>
-              صُممت لمن؟
-            </h2>
-            <p
-              style={{
-                fontSize: 16,
-                color: B.sub,
-                maxWidth: 500,
-                margin: '0 auto',
-                lineHeight: 1.9,
-                fontFamily: BODY,
-              }}
-            >
-              مِدَاد تَخدم المعلمََ والمتعلمَ، وتتوسع لتشملَ الإدارة المدرسية
-            </p>
-          </div>
+      <div style={{ height: 3, background: B.gradMain }} />
 
-          <div className="grid-3">
-            {[
-              {
-                title: 'للمعلّم',
-                c: B.crimson,
-                desc: 'إعداد أسرع للشرح والخطة والاختبار مع مخرجات قابلة للتصدير مباشرة.',
-                pts: ['شرح وأوراق عمل فورية', 'إرسال مهام للطلاب', 'تحليلات أداء واضحة'],
-              },
-              {
-                title: 'للمتعلّم',
-                c: B.amber,
-                desc: 'تجربة تدريب أبسط وأكثر تفاعلاً ضمن محتوى موجّه ومرتب.',
-                pts: ['شرح مخصص لدروسه', 'اختبارات وبطاقات حفظ', 'تتبع درجاته وتقدمه'],
-              },
-              {
-                title: 'للمدرسة',
-                c: B.deep,
-                desc: 'هيكل منظم لإدارة المحتوى والاختبارات ومتابعة الأداء.',
-                pts: ['إدارة المعلمين والطلاب', 'تقارير شاملة', 'محتوى موحّد ومنظم'],
-              },
-            ].map((r, i) => (
-              <div
-                key={r.title}
-                id={`r${i}`}
-                ref={setRef(`r${i}`) as any}
-                className="card"
-                style={{ borderRadius: 24, padding: 26, ...anim(`r${i}`, i * 0.1) }}
-              >
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 999,
-                    background: r.c,
-                    marginBottom: 18,
-                    boxShadow: `0 4px 12px ${r.c}40`,
-                  }}
-                />
-                <h3 style={{ fontSize: 22, fontWeight: 900, fontFamily: HEADING, marginBottom: 10 }}>{r.title}</h3>
-                <p style={{ color: B.sub, lineHeight: 1.9, fontSize: 15, marginBottom: 18, fontFamily: BODY }}>
-                  {r.desc}
-                </p>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {r.pts.map(p => (
-                    <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: '50%',
-                          background: B.amber,
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span style={{ fontSize: 14, color: B.text, fontFamily: BODY }}>{p}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="why" ref={setRef('why') as any} className="section">
-        <div className="container" style={{ maxWidth: 800, textAlign: 'center' }}>
-          <div style={{ ...anim('why') }}>
-            <h2 style={{ fontSize: 38, fontWeight: 900, fontFamily: HEADING, marginBottom: 18 }}>
-              لماذا مِدَاد؟
-            </h2>
-            <p
-              style={{
-                fontSize: 17,
-                color: B.sub,
-                lineHeight: 1.95,
-                marginBottom: 48,
-                fontFamily: BODY,
-              }}
-            >
-              مِدَاد اسم يجمع المُعَلِّم والمُتَعَلِّم، ويعبّر عن دعمٍ يدوم وأصالةٍ تمتزجُ بالإبداع.
-            </p>
-          </div>
-
+      <footer style={{ background: B.bgSoft, borderTop: `1px solid ${B.border}`, padding: '28px 0 0' }}>
+        <div className="container" style={{ paddingBottom: 22, borderBottom: `1px solid ${B.border}` }}>
           <div
-            id="letters"
-            ref={setRef('letters') as any}
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
-              gap: 16,
-              maxWidth: 680,
-              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 14,
+              flexWrap: 'wrap',
             }}
           >
             {[
@@ -732,50 +640,32 @@ export default function LandingPage() {
               <div
                 key={i}
                 style={{
-                  padding: '24px 14px',
-                  borderRadius: 18,
-                  textAlign: 'center',
-                  background: `${h.c}0d`,
-                  border: `1px solid ${h.c}2a`,
-                  boxShadow: B.shadow,
-                  ...anim('letters', i * 0.1),
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '7px 14px',
+                  borderRadius: 999,
+                  background: 'rgba(140,20,40,0.05)',
+                  border: `1.5px solid ${h.c}`,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 44,
-                    fontWeight: 900,
-                    color: h.c,
-                    marginBottom: 10,
-                    lineHeight: 1,
-                    fontFamily: HEADING,
-                  }}
-                >
-                  {h.l}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: B.sub,
-                    lineHeight: 1.7,
-                    fontWeight: 600,
-                    fontFamily: BODY,
-                  }}
-                >
-                  {h.w}
-                </div>
+                <span style={{ fontSize: 18, fontWeight: 900, color: h.c, fontFamily: HEADING }}>{h.l}</span>
+                <span style={{ fontSize: 12, color: B.sub, fontFamily: BODY, whiteSpace: 'nowrap' }}>{h.w}</span>
               </div>
             ))}
           </div>
         </div>
-      </section>
 
-      <div style={{ height: 3, background: B.gradMain }} />
-
-      <footer style={{ background: B.bgSoft, borderTop: `1px solid ${B.border}`, padding: '28px 0 36px' }}>
         <div
           className="container"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 18,
+            flexWrap: 'wrap',
+            padding: '22px 28px 36px',
+          }}
         >
           <Logo h={38} />
           <div style={{ color: B.sub, fontSize: 13, fontFamily: BODY }}>
@@ -785,9 +675,8 @@ export default function LandingPage() {
             {[
               ['#explore', 'استكشف المنهج'],
               ['#plans', 'اختر باقتك'],
-              ['#features', 'المزايا'],
+              ['#roles', 'لمن؟'],
               ['#how', 'كيف تعمل'],
-              ['#roles', 'لمن'],
             ].map(([href, label]) => (
               <a key={href} href={href} className="nav-a" style={{ fontSize: 14, fontFamily: BODY }}>
                 {label}

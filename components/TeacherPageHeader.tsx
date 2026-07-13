@@ -68,7 +68,7 @@ export function TeacherPageHeader({ vm }: TeacherPageHeaderProps) {
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" onClick={() => router.push('/dashboard')} style={ghostBtn(false)}>
-            ✨ أدوات التوليد
+            🏠 لوحة التحكم
           </button>
 
           <button

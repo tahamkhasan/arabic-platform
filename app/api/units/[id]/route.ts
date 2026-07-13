@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin, getServiceClient } from '@/lib/server/auth'
+import { requireAdminOrSubjectTeacher } from '@/lib/server/subjectContentAuth'
 
 type Context = {
   params: Promise<{ id: string }>
@@ -10,11 +11,14 @@ type Context = {
 // ويُستخدَم أيضاً للتبديل السريع لـ is_active وحده من البطاقة)
 // ══════════════════════════════════════════════════════════════
 export async function PATCH(req: NextRequest, context: Context) {
-  const auth = await requireAdmin(req)
-  if (!auth.ok) return auth.response
-
   try {
     const { id } = await context.params
+
+    const supabase = getServiceClient()
+    const { data: unitRow } = await supabase.from('units').select('subject_id').eq('id', id).maybeSingle()
+
+    const auth = await requireAdminOrSubjectTeacher(req, unitRow?.subject_id || null)
+    if (!auth.ok) return auth.response
     const body = await req.json()
     const { name, description, order_num, icon, is_active, semester } = body as {
       name?: string
@@ -24,8 +28,6 @@ export async function PATCH(req: NextRequest, context: Context) {
       is_active?: boolean
       semester?: number
     }
-
-    const supabase = getServiceClient()
 
     const updates: Record<string, any> = {}
     if (name !== undefined) updates.name = name.trim()

@@ -1,13 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BRAND } from '@/lib/constants/theme'
+import { STAGE_LABELS, GRADES_BY_STAGE, type StageKey } from '@/lib/constants/stages'
 import CurriculumView from '@/components/curriculum/CurriculumView'
 
 // components/landing/CurriculumExplorer.tsx
 // مستكشف منهج عام — يعمل بلا تسجيل دخول، يستخدم نقاط الـ API
 // العامة الموجودة فعلاً: /api/subjects و /api/subjects/[id]/curriculum
+//
+// ── مُعدَّل: المواد لا تظهر إطلاقاً حتى يختار الزائر المرحلة ثم
+// الصف معاً (بدل الظهور الفوري لكل مواد المرحلة) — تصفح أكثر
+// تدرّجاً واختصاراً بصرياً. ──────────────────────────────────
+
+type SubjectOffering = { stage: string; grade: string; track?: string | null }
 
 type Subject = {
   id: string
@@ -15,104 +22,146 @@ type Subject = {
   icon?: string
   grade?: string
   stage?: string
-}
-
-// ──────────────────────────────────────────────────────────────
-// المفتاح الصحيح للمرحلة الثانوية في قاعدة البيانات هو 'secondary'
-// (وليس 'high') — تأكيد مباشر بعد فحص subjects.stage فعلياً. كان
-// الزر يرسل 'high' سابقاً، فلا يطابق أي صفّ، فتظهر القائمة فارغة
-// دائماً عند اختيار "ثانوي" تحديداً.
-//
-// كذلك أُضيف STAGE_ALIASES أدناه كطبقة حماية إضافية في الفلترة
-// المحلية: حتى لو تبقّت بيانات قديمة بمفتاح عربي ('ثانوي'/'ابتدائي'
-// /'متوسط') لم تُهاجَر بعد في بيئة أخرى، لا تُسقط هذه الصفوف بصمت من
-// النتائج — يُطابق الفلتر القيمة الإنجليزية وما يرادفها عربياً معاً.
-// ──────────────────────────────────────────────────────────────
-const STAGE_TABS = [
-  { id: '', label: 'الكل', icon: '🗂️' },
-  { id: 'primary', label: 'ابتدائي', icon: '🧒' },
-  { id: 'middle', label: 'متوسط', icon: '📘' },
-  { id: 'secondary', label: 'ثانوي', icon: '🎓' },
-] as const
-
-const STAGE_ALIASES: Record<string, string[]> = {
-  primary: ['primary', 'ابتدائي'],
-  middle: ['middle', 'متوسط'],
-  secondary: ['secondary', 'ثانوي'],
+  offerings?: SubjectOffering[]
 }
 
 export default function CurriculumExplorer() {
   const router = useRouter()
-  const [stage, setStage] = useState<string>('')
+  const [selectedStage, setSelectedStage] = useState<StageKey | null>(null)
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [openSubject, setOpenSubject] = useState<Subject | null>(null)
 
   useEffect(() => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (stage) params.set('stage', stage)
+    if (!selectedStage) {
+      setSubjects([])
+      return
+    }
 
-    fetch(`/api/subjects?${params.toString()}`)
+    let cancelled = false
+    setLoading(true)
+
+    fetch(`/api/subjects?stages=${selectedStage}`)
       .then(r => r.json())
       .then(d => {
-        const all: Subject[] = d.subjects ?? []
-        // طبقة حماية: إن أعاد الخادم نتائج غير مفلترة فعلياً (أو
-        // كانت بعض الصفوف لا تزال بمفتاح عربي قديم لم يُهاجَر)،
-        // نُطبّق فلترة محلية إضافية تقبل المرادفين معاً.
-        if (!stage) {
-          setSubjects(all)
-        } else {
-          const aliases = STAGE_ALIASES[stage] ?? [stage]
-          setSubjects(all.filter(s => !s.stage || aliases.includes(s.stage)))
-        }
+        if (cancelled) return
+        setSubjects(d.subjects ?? [])
       })
-      .catch(() => setSubjects([]))
-      .finally(() => setLoading(false))
-  }, [stage])
+      .catch(() => {
+        if (!cancelled) setSubjects([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedStage])
+
+  // ── مادة تُعتبر متاحة لهذا الصف إن كانت ضمن offerings الحديثة،
+  // أو (كحل احتياطي) إن كان حقلها القديم subject.grade يطابق مباشرة ──
+  const visibleSubjects = useMemo(() => {
+    if (!selectedStage || !selectedGrade) return []
+    return subjects.filter(s => {
+      if (Array.isArray(s.offerings) && s.offerings.length > 0) {
+        return s.offerings.some(o => o.stage === selectedStage && o.grade === selectedGrade)
+      }
+      return s.grade === selectedGrade
+    })
+  }, [subjects, selectedStage, selectedGrade])
 
   function handleSelectLesson() {
     // المستخدم غير مسجَّل — فتح الدرس فعلياً يتطلب حساباً
     router.push('/login')
   }
 
+  function chooseStage(stage: StageKey) {
+    setSelectedStage(stage)
+    setSelectedGrade(null)
+  }
+
   return (
     <div>
-      {/* تبويبات المراحل */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 32 }}>
-        {STAGE_TABS.map(tab => {
-          const active = stage === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setStage(tab.id)}
-              style={{
-                padding: '10px 22px',
-                borderRadius: BRAND.radiusPill,
-                border: `1.5px solid ${active ? BRAND.crimson : BRAND.border}`,
-                background: active ? `${BRAND.crimson}14` : 'rgba(255,255,255,0.65)',
-                color: active ? BRAND.crimson : BRAND.sub,
-                fontWeight: active ? BRAND.weightBold : BRAND.weightSemibold,
-                fontSize: 14,
-                cursor: 'pointer',
-                fontFamily: BRAND.fontBody,
-                transition: 'all 0.18s',
-              }}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          )
-        })}
+      {/* الخطوة ①: اختيار المرحلة */}
+      <div style={{ textAlign: 'center', marginBottom: 22 }}>
+        <div style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: BRAND.sub, marginBottom: 14 }}>
+          ① اختر المرحلة الدراسية
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {(Object.keys(STAGE_LABELS) as StageKey[]).map(stage => {
+            const active = selectedStage === stage
+            return (
+              <button
+                key={stage}
+                onClick={() => chooseStage(stage)}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: BRAND.radiusPill,
+                  border: `1.5px solid ${active ? BRAND.crimson : BRAND.border}`,
+                  background: active ? `${BRAND.crimson}14` : 'rgba(255,255,255,0.65)',
+                  color: active ? BRAND.crimson : BRAND.sub,
+                  fontWeight: active ? BRAND.weightBold : BRAND.weightSemibold,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  fontFamily: BRAND.fontBody,
+                  transition: 'all 0.18s',
+                }}
+              >
+                {STAGE_LABELS[stage]}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* شبكة المواد */}
-      {loading ? (
+      {/* الخطوة ②: اختيار الصف — تظهر فقط بعد اختيار المرحلة */}
+      {selectedStage && (
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: BRAND.weightBold, color: BRAND.sub, marginBottom: 14 }}>
+            ② اختر الصف
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {GRADES_BY_STAGE[selectedStage].map(g => {
+              const active = selectedGrade === g.id
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => setSelectedGrade(g.id)}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: BRAND.radiusPill,
+                    border: `1.5px solid ${active ? BRAND.crimson : BRAND.border}`,
+                    background: active ? `${BRAND.crimson}14` : 'rgba(255,255,255,0.65)',
+                    color: active ? BRAND.crimson : BRAND.sub,
+                    fontWeight: active ? BRAND.weightBold : BRAND.weightSemibold,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: BRAND.fontBody,
+                    transition: 'all 0.18s',
+                  }}
+                >
+                  {g.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* شبكة المواد — تظهر فقط بعد اختيار المرحلة والصف معاً */}
+      {!selectedStage ? null : !selectedGrade ? (
+        <p style={{ textAlign: 'center', color: BRAND.sub, fontFamily: BRAND.fontBody, padding: '16px 0 8px' }}>
+          اختر الصف أعلاه لعرض المواد المتاحة.
+        </p>
+      ) : loading ? (
         <p style={{ textAlign: 'center', color: BRAND.sub, fontFamily: BRAND.fontBody, padding: '40px 0' }}>
           ⏳ جارٍ التحميل...
         </p>
-      ) : subjects.length === 0 ? (
+      ) : visibleSubjects.length === 0 ? (
         <p style={{ textAlign: 'center', color: BRAND.sub, fontFamily: BRAND.fontBody, padding: '40px 0' }}>
-          لا توجد مواد منشورة لهذه المرحلة حتى الآن.
+          لا توجد مواد منشورة لهذا الصف حتى الآن.
         </p>
       ) : (
         <div
@@ -122,7 +171,7 @@ export default function CurriculumExplorer() {
             gap: 18,
           }}
         >
-          {subjects.map(s => (
+          {visibleSubjects.map(s => (
             <button
               key={s.id}
               onClick={() => setOpenSubject(s)}
@@ -139,9 +188,7 @@ export default function CurriculumExplorer() {
               <div style={{ fontSize: 16, fontWeight: BRAND.weightBlack, fontFamily: BRAND.fontHeading, color: BRAND.text, marginBottom: 4 }}>
                 {s.name}
               </div>
-              {s.grade && (
-                <div style={{ fontSize: 13, color: BRAND.sub }}>الصف {s.grade}</div>
-              )}
+              <div style={{ fontSize: 13, color: BRAND.sub }}>الصف {selectedGrade}</div>
               <div
                 style={{
                   marginTop: 14,

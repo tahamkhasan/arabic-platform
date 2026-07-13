@@ -451,9 +451,10 @@ export default function LoginPage() {
                     lineHeight: 1.18,
                     color: B.text,
                     marginBottom: 12,
+                    textAlign: 'center',
                   }}
                 >
-                  ابدأ من مكان واضح
+                  ابدأ اليوم مع مداد
                   <br />
                   <span
                     style={{
@@ -464,7 +465,7 @@ export default function LoginPage() {
                       animation: 'shimmer 4s linear infinite',
                     }}
                   >
-                    وادخل إلى أدواتك بسرعة.
+                    وكن من النخبة أنت في بؤرة الاهتمام.
                   </span>
                 </h1>
 

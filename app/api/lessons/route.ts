@@ -108,14 +108,12 @@ export async function GET(req: NextRequest) {
 // أن GET أعلاه لم يعد يعتمد عليه حصرياً (أمان مضاعف) ──────────────
 // ══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req)
-  if (!auth.ok) return auth.response
-
   try {
     const formData = await req.formData()
 
     const unitId      = getStr(formData, 'unitId', 'unit_id')
     let subjectId      = getStr(formData, 'subjectId', 'subject_id')
+
     const name        = getStr(formData, 'name')
     const description = getStr(formData, 'description')
     const content      = getStr(formData, 'content')
@@ -154,6 +152,9 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
       subjectId = unitRow?.subject_id || null
     }
+
+    const auth = await requireAdmin(req)
+    if (!auth.ok) return auth.response
 
     // ترتيب تلقائي إن لم يُحدَّد (آخر ترتيب + 1)
     let orderNum = orderNumRaw ? parseInt(orderNumRaw, 10) : NaN

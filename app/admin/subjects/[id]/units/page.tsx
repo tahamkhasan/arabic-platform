@@ -2,7 +2,7 @@
 import { Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import UnitsPageView from '@/components/units/UnitsPageView'
-import { useAdminGuard } from '@/hooks/useAdminGuard'
+import { useSubjectContentGuard } from '@/hooks/useSubjectContentGuard'
 import { useUnitsPage } from '@/hooks/useUnitsPage'
 import type { UnitItem } from '@/types/units'
 
@@ -18,7 +18,7 @@ function AdminSubjectUnitsContent() {
   const subjectId = params.id
   const subjectName = searchParams.get('subjectName') || 'المادة'
 
-  const { ready, accessToken, guardError } = useAdminGuard()
+  const { ready, accessToken, guardError } = useSubjectContentGuard(subjectId)
 
   const {
     units,
@@ -104,7 +104,7 @@ function AdminSubjectUnitsContent() {
       onDelete={deleteUnit}
       onOpenLessons={(unit: UnitItem) =>
         router.push(
-          `/admin/units/${unit.id}/lessons?unitName=${encodeURIComponent(unit.name)}&subjectName=${encodeURIComponent(subjectName)}`
+          `/admin/units/${unit.id}/lessons?unitName=${encodeURIComponent(unit.name)}&subjectName=${encodeURIComponent(subjectName)}&subjectId=${subjectId}`
         )
       }
       onToggleActive={toggleUnitActive}
