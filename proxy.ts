@@ -12,7 +12,7 @@ const PUBLIC_PATHS = [
   '/activity',
 ]
 
-const PUBLIC_API_PATHS = ['/api/register']
+const PUBLIC_API_PATHS = ['/api/register', '/api/keep-alive']
 
 const PUBLIC_API_PREFIXES = [
   '/api/auth/forgot-password',
