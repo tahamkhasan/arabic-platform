@@ -655,3 +655,100 @@ export async function PATCH(req: NextRequest) {
     )
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAdminOrPermission(req, 'manage_student_accounts')
+  if (!auth.ok) return auth.response
+
+  try {
+    const supabase = getServiceClient()
+
+    const body = (await req.json().catch(() => null)) as
+      | {
+          userId?: string
+        }
+      | null
+
+    if (!body?.userId) {
+      return NextResponse.json(
+        { error: 'معرّف المستخدم userId مطلوب.' },
+        { status: 400 }
+      )
+    }
+
+    const userId = String(body.userId).trim()
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'معرّف المستخدم غير صالح.' },
+        { status: 400 }
+      )
+    }
+
+    const { data: existingUser, error: existingUserError } = await supabase
+      .from('users')
+      .select('id, role, user_type')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (existingUserError) {
+      return NextResponse.json(
+        { error: existingUserError.message || 'تعذر التحقق من المستخدم.' },
+        { status: 500 }
+      )
+    }
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { error: 'المستخدم غير موجود.' },
+        { status: 404 }
+      )
+    }
+
+    const { error: subscriptionsDeleteError } = await supabase
+      .from('student_subscriptions')
+      .delete()
+      .eq('student_id', userId)
+
+    if (subscriptionsDeleteError) {
+      console.error('Users DELETE subscriptions delete error:', subscriptionsDeleteError)
+      return NextResponse.json(
+        { error: subscriptionsDeleteError.message || 'فشل حذف اشتراكات الطالب.' },
+        { status: 500 }
+      )
+    }
+
+    const { error: userDeleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId)
+
+    if (userDeleteError) {
+      console.error('Users DELETE user row delete error:', userDeleteError)
+      return NextResponse.json(
+        { error: userDeleteError.message || 'فشل حذف سجل المستخدم.' },
+        { status: 500 }
+      )
+    }
+
+    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId)
+
+    if (authDeleteError) {
+      console.error('Users DELETE auth delete error:', authDeleteError)
+      return NextResponse.json(
+        { error: authDeleteError.message || 'تم حذف سجل المستخدم لكن فشل حذف حساب الدخول.' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'تم حذف المستخدم بنجاح.',
+    })
+  } catch (err) {
+    console.error('Users DELETE unexpected error:', err)
+    return NextResponse.json(
+      { error: 'Unexpected error while deleting user.' },
+      { status: 500 }
+    )
+  }
+}

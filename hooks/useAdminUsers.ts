@@ -210,26 +210,52 @@ export function useAdminUsers(params: {
     [users],
   )
 
-  function filterList(list: User[]) {
-    return list.filter(u => {
-      const displayName = u.full_name || u.name || u.email || ''
-      const q = searchQ.trim().toLowerCase()
-      const email = (u.email || '').toLowerCase()
+  function sortUsersForAdmin(list: User[]) {
+    return [...list].sort((a, b) => {
+      const aPending = a.status === 'pending' ? 1 : 0
+      const bPending = b.status === 'pending' ? 1 : 0
 
-      const matchSearch =
-        !q ||
-        displayName.toLowerCase().includes(q) ||
-        email.includes(q) ||
-        (u.assigned_role?.name || '').toLowerCase().includes(q) ||
-        (u.assigned_role?.key || '').toLowerCase().includes(q)
+      if (aPending !== bPending) {
+        return bPending - aPending
+      }
 
-      const matchFilter = statusFilter === 'all' ? true : u.status === 'pending'
-      return matchSearch && matchFilter
+      const aTime = new Date((a as any).created_at ?? 0).getTime()
+      const bTime = new Date((b as any).created_at ?? 0).getTime()
+
+      return bTime - aTime
     })
   }
 
-  const filteredStudents = useMemo(() => filterList(studentUsers), [studentUsers, searchQ, statusFilter])
-  const filteredTeachers = useMemo(() => filterList(teacherUsers), [teacherUsers, searchQ, statusFilter])
+  function filterList(list: User[]) {
+    const q = searchQ.trim().toLowerCase()
+
+    return sortUsersForAdmin(
+      list.filter(u => {
+        const displayName = u.full_name || u.name || u.email || ''
+        const email = (u.email || '').toLowerCase()
+
+        const matchSearch =
+          !q ||
+          displayName.toLowerCase().includes(q) ||
+          email.includes(q) ||
+          (u.assigned_role?.name || '').toLowerCase().includes(q) ||
+          (u.assigned_role?.key || '').toLowerCase().includes(q)
+
+        const matchFilter = statusFilter === 'all' ? true : u.status === 'pending'
+        return matchSearch && matchFilter
+      })
+    )
+  }
+
+  const filteredStudents = useMemo(
+    () => filterList(studentUsers),
+    [studentUsers, searchQ, statusFilter]
+  )
+
+  const filteredTeachers = useMemo(
+    () => filterList(teacherUsers),
+    [teacherUsers, searchQ, statusFilter]
+  )
 
   const pendingCount = users.filter(u => u.status === 'pending').length
   const studentsCount = studentUsers.length

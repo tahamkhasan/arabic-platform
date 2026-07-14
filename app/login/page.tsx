@@ -900,11 +900,20 @@ export default function LoginPage() {
                     onClick={() => router.push('/landing')}
                     style={{
                       all: 'unset',
-                      color: `${B.sub}75`,
-                      fontSize: 13,
+                      boxSizing: 'border-box',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: '10px 20px',
+                      borderRadius: 12,
+                      border: `1.5px solid ${B.border}`,
+                      background: 'rgba(255,255,255,0.7)',
+                      color: B.crimson,
+                      fontSize: 14,
                       cursor: 'pointer',
                       fontFamily: BODY,
-                      fontWeight: 600,
+                      fontWeight: 800,
                     }}
                   >
                     ← الصفحة الرئيسية

@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sendRegistrationEmail } from '@/lib/email'
 
+type SubscriptionType = 'package' | 'subjects'
+
+type SubjectRow = {
+  id: string
+  name: string
+  stage: string | null
+  grade: string | null
+  is_active: boolean | null
+}
+
+type SubjectOfferingRow = {
+  subject_id: string
+  stage: string | null
+  grade: string | null
+  track: string | null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const {
@@ -11,28 +28,22 @@ export async function POST(req: NextRequest) {
       userType,
       allowedStages,
       allowedGrades,
-      planType,
-      planId,
+      allowedTracks,
+      subscriptionType,
+      subjectIds,
     } = await req.json()
 
     if (!name || !email || !password || !userType) {
-      return NextResponse.json(
-        { error: 'جميع الحقول مطلوبة' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'جميع الحقول مطلوبة' }, { status: 400 })
     }
 
-    // ── جديد: التسجيل الذاتي العام مقصور على الطالب فقط ──────────
-    // تسجيل المعلمين أصبح حصرياً عبر app/api/teachers/route.ts،
-    // الذي يتطلب صلاحية create_teachers (أدمن أو موظف مخوَّل).
-    // هذا يمنع أي مسار خلفي يسمح بإنشاء حساب "موظف/معلم" ذاتياً.
     if (userType !== 'student') {
       return NextResponse.json(
         {
           error:
-            'التسجيل الذاتي مخصَّص للطلاب فقط. حسابات المعلمين تُنشأ من قِبل إدارة المنصة — تواصل معها لإنشاء حسابك.',
+            'التسجيل الذاتي مخصَّص للطلاب فقط. حسابات المعلمين والمشرفين ومدخلي البيانات تُنشأ من قِبل إدارة المنصة.',
         },
-        { status: 403 },
+        { status: 403 }
       )
     }
 
@@ -43,64 +54,111 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const hasValidPlan =
-      (planType === 'package' || planType === 'subject') &&
-      typeof planId === 'string' &&
-      planId.length > 0
+    const normalizedStages = Array.isArray(allowedStages)
+      ? allowedStages.map((item: unknown) => String(item).trim()).filter(Boolean)
+      : []
 
-    let planSubjectId: string | null = null
-    let planPackageId: string | null = null
-    let planStage: string | null = null
-    let planGrade: string | null = null
-    let planTrack: string | null = null
-    let planLookupFailed = false
+    const normalizedGrades = Array.isArray(allowedGrades)
+      ? allowedGrades.map((item: unknown) => String(item).trim()).filter(Boolean)
+      : []
 
-    if (hasValidPlan) {
-      try {
-        if (planType === 'subject') {
-          const { data: subject, error: subjectError } = await supabaseAdmin
-            .from('subjects')
-            .select('id, stage, grade, track')
-            .eq('id', planId)
-            .eq('is_active', true)
-            .maybeSingle()
+    const normalizedTracks = Array.isArray(allowedTracks)
+      ? allowedTracks.map((item: unknown) => String(item).trim()).filter(Boolean)
+      : []
 
-          if (!subjectError && subject) {
-            planSubjectId = subject.id
-            planStage = subject.stage ?? null
-            planGrade = subject.grade ?? null
-            planTrack = subject.track ?? null
-          } else {
-            planLookupFailed = true
-          }
-        } else {
-          const { data: pkg, error: pkgError } = await supabaseAdmin
-            .from('subject_packages')
-            .select('id, stage, grade, track')
-            .eq('id', planId)
-            .maybeSingle()
+    const normalizedSubjectIds = Array.isArray(subjectIds)
+      ? Array.from(new Set(subjectIds.map((item: unknown) => String(item).trim()).filter(Boolean)))
+      : []
 
-          if (!pkgError && pkg) {
-            planPackageId = pkg.id
-            planStage = pkg.stage ?? null
-            planGrade = pkg.grade ?? null
-            planTrack = pkg.track ?? null
-          } else {
-            planLookupFailed = true
-          }
-        }
-      } catch (planLookupErr) {
-        console.error('Plan lookup error:', planLookupErr)
-        planLookupFailed = true
-      }
+    const validSubscriptionType =
+      subscriptionType === 'package' || subscriptionType === 'subjects'
+        ? (subscriptionType as SubscriptionType)
+        : null
+
+    if (!validSubscriptionType) {
+      return NextResponse.json({ error: 'نوع الاشتراك غير صالح' }, { status: 400 })
     }
 
-    const finalAllowedStages =
-      planStage ? [planStage] : (allowedStages || [])
-    const finalAllowedGrades =
-      planGrade ? [planGrade] : (allowedGrades || [])
+    if (normalizedStages.length === 0) {
+      return NextResponse.json({ error: 'يرجى تحديد المرحلة الدراسية' }, { status: 400 })
+    }
 
-    // role هو دائماً 'student' هنا، بعد فلترة userType أعلاه
+    if (normalizedGrades.length === 0) {
+      return NextResponse.json({ error: 'يرجى تحديد الصف الدراسي' }, { status: 400 })
+    }
+
+    if (normalizedSubjectIds.length === 0) {
+      return NextResponse.json(
+        { error: 'يرجى اختيار مادة واحدة على الأقل أو التأكد من مواد الباقة الشاملة' },
+        { status: 400 }
+      )
+    }
+
+    const stage = normalizedStages[0] ?? null
+    const grade = normalizedGrades[0] ?? null
+    const track = normalizedTracks[0] ?? null
+
+    const { data: subjectsData, error: subjectsError } = await supabaseAdmin
+      .from('subjects')
+      .select('id, name, stage, grade, is_active')
+      .in('id', normalizedSubjectIds)
+
+    if (subjectsError) throw subjectsError
+
+    if (!subjectsData || subjectsData.length === 0) {
+      return NextResponse.json({ error: 'لم يتم العثور على المواد المختارة' }, { status: 400 })
+    }
+
+    if (subjectsData.length !== normalizedSubjectIds.length) {
+      return NextResponse.json(
+        { error: 'بعض المواد المختارة غير موجودة أو غير صالحة' },
+        { status: 400 }
+      )
+    }
+
+    const { data: offeringsData, error: offeringsError } = await supabaseAdmin
+      .from('subject_offerings')
+      .select('subject_id, stage, grade, track')
+      .in('subject_id', normalizedSubjectIds)
+
+    if (offeringsError) throw offeringsError
+
+    const offeringsBySubject = new Map<string, SubjectOfferingRow[]>()
+
+    for (const offering of (offeringsData || []) as SubjectOfferingRow[]) {
+      const current = offeringsBySubject.get(offering.subject_id) || []
+      current.push(offering)
+      offeringsBySubject.set(offering.subject_id, current)
+    }
+
+    const invalidSubject = (subjectsData as SubjectRow[]).find(subject => {
+      const active = subject.is_active !== false
+      if (!active) return true
+
+      const offerings = offeringsBySubject.get(subject.id) || []
+      if (offerings.length === 0) return true
+
+      return !offerings.some(offering => {
+        const sameStage = String(offering.stage ?? '').trim() === String(stage ?? '').trim()
+        const sameGrade = String(offering.grade ?? '').trim() === String(grade ?? '').trim()
+
+        if (!sameStage || !sameGrade) return false
+
+        if (track) {
+          return String(offering.track ?? '').trim() === String(track).trim()
+        }
+
+        return !String(offering.track ?? '').trim()
+      })
+    })
+
+    if (invalidSubject) {
+      return NextResponse.json(
+        { error: 'يوجد تعارض بين المواد المختارة والمرحلة أو الصف أو التشعيب' },
+        { status: 400 }
+      )
+    }
+
     const role = 'student'
 
     let defaultRoleId: string | null = null
@@ -148,9 +206,8 @@ export async function POST(req: NextRequest) {
       assigned_role_id: defaultRoleId,
       status: 'pending',
       is_active: true,
-      allowed_stages: finalAllowedStages,
-      allowed_grades: finalAllowedGrades,
-      track: planTrack,
+      allowed_stages: normalizedStages,
+      allowed_grades: normalizedGrades,
     })
 
     if (dbError) {
@@ -158,31 +215,33 @@ export async function POST(req: NextRequest) {
       throw dbError
     }
 
-    if (planSubjectId || planPackageId) {
-      try {
-        const { error: subError } = await supabaseAdmin
-          .from('student_subscriptions')
-          .insert({
-            student_id: userId,
-            subscription_type: planSubjectId ? 'subject' : 'package',
-            subject_id: planSubjectId,
-            package_id: planPackageId,
-            stage: planStage,
-            grade: planGrade,
-            track: planTrack,
-            is_active: true,
-          })
+    const subscriptionRows = normalizedSubjectIds.map(subjectId => ({
+      student_id: userId,
+      subscription_type: 'subject',
+      subject_id: subjectId,
+      package_id: null,
+      stage,
+      grade,
+      track,
+      is_active: true,
+    }))
 
-        if (subError) {
-          console.error('Subscription insert error:', subError)
-        }
-      } catch (subErr) {
-        console.error('Subscription insert error:', subErr)
-      }
-    } else if (hasValidPlan && planLookupFailed) {
-      console.error(
-        `Plan lookup failed for ${planType} id=${planId} during registration of user ${userId}`
-      )
+    const { error: subError } = await supabaseAdmin
+      .from('student_subscriptions')
+      .insert(subscriptionRows)
+
+    if (subError) {
+      console.error('Subscription insert error:', {
+        message: subError.message,
+        details: subError.details,
+        hint: subError.hint,
+        code: subError.code,
+      })
+
+      await supabaseAdmin.from('users').delete().eq('id', userId)
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+
+      throw new Error(`فشل حفظ اشتراكات الطالب: ${subError.message}`)
     }
 
     try {
@@ -190,8 +249,8 @@ export async function POST(req: NextRequest) {
         name,
         email,
         userType: 'student',
-        allowedStages: finalAllowedStages,
-        allowedGrades: finalAllowedGrades,
+        allowedStages: normalizedStages,
+        allowedGrades: normalizedGrades,
       })
     } catch (emailErr) {
       console.error('Email error:', emailErr)

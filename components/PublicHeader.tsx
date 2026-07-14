@@ -190,7 +190,7 @@ export default function PublicHeader({ activePage = 'landing', logoUrl = '/logo-
           <button
             type="button"
             className="hdr-btn"
-            onClick={() => router.push('/login')}
+            onClick={() => router.push('/register')}
             style={{
               padding: '10px 22px',
               borderRadius: 11,

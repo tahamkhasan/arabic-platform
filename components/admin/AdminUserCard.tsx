@@ -34,6 +34,22 @@ export default function AdminUserCard({
   const displayName = u.full_name || u.name || u.email || 'بدون بريد'
   const isTeacher = u.user_type === 'teacher' || u.role === 'teacher'
 
+  function handleDeleteClick() {
+    const accountLabel =
+      u.user_type === 'student'
+        ? 'الطالب'
+        : u.user_type === 'teacher' || u.role === 'teacher'
+        ? 'المعلم'
+        : 'الموظف'
+
+    const ok = window.confirm(
+      `هل أنت متأكد من حذف حساب ${accountLabel} "${displayName}"؟\n\nلا يمكن التراجع عن هذا الإجراء بعد الحذف.`
+    )
+
+    if (!ok) return
+    onDelete(u)
+  }
+
   return (
     <div
       style={{
@@ -271,7 +287,7 @@ export default function AdminUserCard({
 
           {u.role !== 'admin' && (
             <button
-              onClick={() => onDelete(u)}
+              onClick={handleDeleteClick}
               style={{
                 padding: '8px 12px',
                 borderRadius: 10,
@@ -283,6 +299,7 @@ export default function AdminUserCard({
                 cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
+              title="حذف الحساب"
             >
               🗑️
             </button>

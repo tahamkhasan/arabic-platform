@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import PublicHeader from '@/components/PublicHeader'
 import { BRAND } from '@/lib/constants/theme'
 import CurriculumExplorer from '@/components/landing/CurriculumExplorer'
@@ -34,6 +35,7 @@ type PublicStats = {
 }
 
 export default function LandingPage() {
+  const router = useRouter()
   const [visible, setVisible] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState('/logo-midad.png')
   const [stats, setStats] = useState<PublicStats>({ subjects: 0, lessons: 0, teachers: 0 })
@@ -184,7 +186,7 @@ export default function LandingPage() {
 
       <section className="section" style={{ paddingTop: 52 }}>
         <div className="container hero-grid">
-          <div>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div className="tiny-label" style={{ marginBottom: 26 }}>
               <span className="dot" />
               للمُعلِّم والمُتعلِّم
@@ -220,14 +222,14 @@ export default function LandingPage() {
               المُتعلمَ تدريباً مستمراً وتجربةً أكثرَ تفاعلاً.
             </p>
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28, justifyContent: 'center' }}>
               <Button
                 type="button"
                 variant="cta"
                 size="lg"
                 title="ابدأ مع مِدَاد"
                 onClick={() => {
-                  document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth' })
+                  router.push('/register')
                 }}
               >
                 ابدأ مع مِدَاد
@@ -246,7 +248,7 @@ export default function LandingPage() {
               </Button>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
               {['شرح ذكي', 'اختبارات تفاعلية', 'خطة درس', 'تصدير Word وPDF'].map(item => (
                 <span
                   key={item}
