@@ -15,6 +15,7 @@ interface TeacherSidebarProps {
   sidebarCollapsed: boolean
   onToggleCollapse: () => void
   onGoQuizBank: () => void
+  onGoStudio: () => void
   ui: any
   userId: string
 }
@@ -28,6 +29,7 @@ export function TeacherSidebar({
   sidebarCollapsed,
   onToggleCollapse,
   onGoQuizBank,
+  onGoStudio,
   ui,
   userId,
 }: TeacherSidebarProps) {
@@ -37,6 +39,7 @@ export function TeacherSidebar({
 
   return (
     <>
+      {/* Sidebar (سطح المكتب) */}
       <aside
         className="teacher-sidebar"
         style={{
@@ -53,7 +56,16 @@ export function TeacherSidebar({
           zIndex: 40,
         }}
       >
-        <nav style={{ flex: 1, padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
+        <nav
+          style={{
+            flex: 1,
+            padding: '18px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            overflowY: 'auto',
+          }}
+        >
           {NAV_ITEMS.map((tb: any) => {
             const isHomeItem = tb.id === '__home__'
             const active = isHomeItem ? isHome : !isHome && tab === tb.id
@@ -131,6 +143,34 @@ export function TeacherSidebar({
 
           <div style={{ height: 1, background: ui.border, margin: '8px 6px' }} />
 
+          {/* زر الاستديو */}
+          <button
+            type="button"
+            onClick={onGoStudio}
+            title={sidebarCollapsed ? 'الاستديو' : undefined}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+              padding: sidebarCollapsed ? '10px 8px' : '10px 14px',
+              borderRadius: 14,
+              border: `1px solid ${ui.borderAccent}`,
+              background: `${ui.themeColor}0A`,
+              color: ui.themeColor,
+              fontWeight: 800,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              width: '100%',
+              textAlign: 'right',
+            }}
+          >
+            <span style={{ fontSize: 17, flexShrink: 0 }}>🎬</span>
+            {!sidebarCollapsed && <span style={{ flex: 1 }}>الاستديو</span>}
+          </button>
+
+          {/* زر بنك الاختبارات */}
           <button
             type="button"
             onClick={onGoQuizBank}
@@ -158,7 +198,15 @@ export function TeacherSidebar({
           </button>
         </nav>
 
-        <div style={{ padding: '12px 10px', borderTop: `1px solid ${ui.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div
+          style={{
+            padding: '12px 10px',
+            borderTop: `1px solid ${ui.border}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
           {!sidebarCollapsed && (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <NotificationBell
@@ -195,6 +243,7 @@ export function TeacherSidebar({
         </div>
       </aside>
 
+      {/* شريط الجوال السفلي */}
       <nav
         className="teacher-mobile-nav"
         style={{
@@ -263,6 +312,29 @@ export function TeacherSidebar({
           )
         })}
 
+        {/* زر الاستديو في الجوال */}
+        <button
+          type="button"
+          onClick={onGoStudio}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 3,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            padding: '4px 8px',
+            borderRadius: 10,
+            color: ui.sub,
+          }}
+        >
+          <span style={{ fontSize: 19 }}>🎬</span>
+          <span style={{ fontSize: 10, fontWeight: 600 }}>الاستديو</span>
+        </button>
+
+        {/* زر الاختبارات في الجوال */}
         <button
           type="button"
           onClick={onGoQuizBank}

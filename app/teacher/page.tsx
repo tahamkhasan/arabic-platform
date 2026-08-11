@@ -43,8 +43,12 @@ export default function TeacherPage() {
       style={{
         minHeight: '100vh',
         background: `
-          radial-gradient(circle at 82% 8%, ${controller.isDark ? 'rgba(217,119,6,0.08)' : 'rgba(225,135,60,0.10)'}, transparent 24%),
-          radial-gradient(circle at 10% 86%, ${controller.isDark ? 'rgba(140,20,40,0.08)' : 'rgba(150,30,45,0.08)'}, transparent 24%),
+          radial-gradient(circle at 82% 8%, ${
+            controller.isDark ? 'rgba(217,119,6,0.08)' : 'rgba(225,135,60,0.10)'
+          }, transparent 24%),
+          radial-gradient(circle at 10% 86%, ${
+            controller.isDark ? 'rgba(140,20,40,0.08)' : 'rgba(150,30,45,0.08)'
+          }, transparent 24%),
           ${controller.ui.bg}
         `,
         color: controller.ui.text,
@@ -73,8 +77,9 @@ export default function TeacherPage() {
           onSelectHome={() => setIsHome(true)}
           onTabChange={handleTabChange}
           sidebarCollapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(v => !v)}
+          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
           onGoQuizBank={() => vm.router.push('/teacher/quizzes')}
+          onGoStudio={() => vm.router.push('/studio')}
           ui={vm.ui}
           userId={vm.user?.id ?? ''}
         />

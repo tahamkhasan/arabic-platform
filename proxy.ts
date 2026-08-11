@@ -29,6 +29,8 @@ const PUBLIC_API_PREFIXES = [
   '/api/visual-card',
   '/api/feedback',
   '/api/platform-settings',
+    '/api/studio/projects',    // ← أضف هذا السطر
+
 ]
 
 const STATIC_FILE_EXTENSIONS = [
