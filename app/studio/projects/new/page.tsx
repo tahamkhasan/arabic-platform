@@ -1,238 +1,531 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { APP, BRAND } from '@/lib/constants/theme'
+import {
+  ChangeEvent,
+  FormEvent,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { BRAND } from '@/lib/constants/theme'
+import { supabase } from '@/lib/supabase'
 
-type StudioOutputType =
-  | 'lesson_summary'
-  | 'mcq_quiz'
-  | 'short_explainer_video'
+type MaterialType = 'file' | 'text' | 'image' | 'video'
+type OutputType = 'summary' | 'quiz' | 'video'
 
-type StudioSourceType = 'pdf' | 'text' | 'image' | 'video'
+type SelectedMaterial = {
+  id: string
+  title: string
+  description: string | null
+  file_url: string | null
+  file_path: string | null
+  file_name: string | null
+  mime_type: string | null
+  material_scope: string | null
+}
 
-export default function NewStudioProjectPage() {
-  const router = useRouter()
+const ACCEPTED_FILE_TYPES =
+  '.pdf,.doc,.docx,.txt,.rtf,.ppt,.pptx,.xls,.xlsx'
 
-  const [title, setTitle] = useState('')
-  const [outputType, setOutputType] = useState<StudioOutputType | ''>('')
-  const [sourceType, setSourceType] = useState<StudioSourceType | ''>('')
+function getOutputLabel(type: OutputType): string {
+  const labels: Record<OutputType, string> = {
+    summary: 'ملخص درس',
+    quiz: 'اختبار',
+    video: 'فيديو شرح مختصر',
+  }
 
-  const [sourceText, setSourceText] = useState('')
-  const [sourceFile, setSourceFile] = useState<File | null>(null)
+  return labels[type]
+}
 
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+function getApiOutputType(type: OutputType): string {
+  const types: Record<OutputType, string> = {
+    summary: 'lesson_summary',
+    quiz: 'mcq_quiz',
+    video: 'short_explainer_video',
+  }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
-    setSuccessMessage(null)
+  return types[type]
+}
 
-    if (!outputType || !sourceType) {
-      setError('يجب اختيار نوع الناتج ونوع المادة المرفوعة.')
-      return
-    }
+function getApiSourceType(type: MaterialType): string {
+  const types: Record<MaterialType, string> = {
+    file: 'pdf_word',
+    text: 'text',
+    image: 'image',
+    video: 'video',
+  }
 
-    if (sourceType === 'text' && !sourceText.trim()) {
-      setError('الرجاء إدخال نص المادة التعليمية أولاً.')
-      return
-    }
+  return types[type]
+}
 
-    if (
-      (sourceType === 'pdf' ||
-        sourceType === 'image' ||
-        sourceType === 'video') &&
-      !sourceFile
-    ) {
-      setError('الرجاء اختيار ملف المادة التعليمية أولاً.')
-      return
-    }
+function getMaterialTypeLabel(type: MaterialType): string {
+  const labels: Record<MaterialType, string> = {
+    file: 'ملف PDF / Word',
+    text: 'نص مكتوب',
+    image: 'صورة (صفحة/شكل)',
+    video: 'فيديو قصير',
+  }
 
-    setSubmitting(true)
+  return labels[type]
+}
 
-    try {
-      // إنشاء المشروع أولاً
-      const createRes = await fetch('/api/studio/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: title.trim() || undefined,
-          outputType,
-          sourceType,
-        }),
-      })
+function getFileName(file: File | null): string {
+  return file?.name || ''
+}
 
-      if (!createRes.ok) {
-        const data = await createRes.json().catch(() => null)
-        const msg =
-          data?.error ||
-          'تعذر إنشاء المشروع. حاول مرة أخرى أو تواصل مع مسؤول المنصة.'
-        setError(msg)
-        setSubmitting(false)
-        return
-      }
+function StudioProjectLoading() {
+  return (
+    <main
+      dir="rtl"
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        background: BRAND.bg,
+        color: BRAND.text,
+        fontFamily: BRAND.fontBody,
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          padding: '28px 24px',
+          borderRadius: 20,
+          background: BRAND.bgCard,
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            margin: '0 auto 14px',
+            borderRadius: '50%',
+            border: `4px solid ${BRAND.border}`,
+            borderTopColor: BRAND.crimson,
+            animation: 'studio-spin 0.8s linear infinite',
+          }}
+        />
 
-      const createData = (await createRes.json()) as {
-        project?: { id?: string }
-      }
+        <p
+          style={{
+            margin: 0,
+            color: BRAND.muted,
+            fontSize: 15,
+            fontWeight: 700,
+          }}
+        >
+          جارٍ تجهيز مشروع الاستوديو...
+        </p>
+      </div>
 
-      const projectId = createData.project?.id
+      <style>{`
+        @keyframes studio-spin {
+          from {
+            transform: rotate(0deg);
+          }
 
-      if (!projectId) {
-        setError('تم إنشاء المشروع لكن لم يتم استرجاع معرفه.')
-        setSubmitting(false)
-        return
-      }
-
-      // رفع الملف إن وجد (Word/PDF/صورة/فيديو)
-      if (
-        sourceFile &&
-        (sourceType === 'pdf' ||
-          sourceType === 'image' ||
-          sourceType === 'video')
-      ) {
-        const formData = new FormData()
-        formData.append('file', sourceFile)
-        formData.append('projectId', projectId)
-
-        const uploadRes = await fetch('/api/studio/upload-source', {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!uploadRes.ok) {
-          const data = await uploadRes.json().catch(() => null)
-          console.error('Failed to upload source file:', data?.error)
-          // نخبرك بالخطأ لكن لا نمنع الانتقال لصفحة المشروع
+          to {
+            transform: rotate(360deg);
+          }
         }
+      `}</style>
+    </main>
+  )
+}
+
+function NewStudioProjectContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const subjectId = searchParams.get('subjectId') || ''
+  const subjectName = searchParams.get('subjectName') || ''
+  const stage = searchParams.get('stage') || ''
+  const grade = searchParams.get('grade') || ''
+  const track = searchParams.get('track') || ''
+  const semester = searchParams.get('semester') || ''
+  const unitId = searchParams.get('unitId') || ''
+  const unitName = searchParams.get('unitName') || ''
+  const lessonId = searchParams.get('lessonId') || ''
+  const lessonName = searchParams.get('lessonName') || ''
+
+  const materialIds = useMemo(() => {
+    const rawIds = searchParams.get('materialIds') || ''
+
+    return rawIds
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+  }, [searchParams])
+
+  const [projectTitle, setProjectTitle] = useState('')
+  const [materialType, setMaterialType] = useState<MaterialType>('file')
+  const [outputType, setOutputType] = useState<OutputType>('summary')
+  const [sourceFile, setSourceFile] = useState<File | null>(null)
+  const [sourceText, setSourceText] = useState('')
+  const [selectedMaterials, setSelectedMaterials] = useState<
+    SelectedMaterial[]
+  >([])
+  const [loadingMaterials, setLoadingMaterials] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadSelectedMaterials() {
+      if (materialIds.length === 0) {
+        setSelectedMaterials([])
+        return
       }
 
-      // يمكن لاحقاً إرسال النص إذا كانت المادة نصاً مكتوباً
-      setSuccessMessage('تم إنشاء مشروع الاستديو بنجاح.')
-      setSubmitting(false)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-      router.push(`/studio/projects/${projectId}`)
-    } catch (err: any) {
-      console.error('Error creating studio project or uploading source:', err)
-      setError('حدث خطأ غير متوقع أثناء إنشاء المشروع أو رفع المادة.')
-      setSubmitting(false)
+      if (!session?.access_token) {
+        router.replace('/login')
+        return
+      }
+
+      setLoadingMaterials(true)
+      setError(null)
+
+      try {
+        const params = new URLSearchParams()
+
+        if (subjectId) {
+          params.set('subjectId', subjectId)
+        }
+
+        if (stage) {
+          params.set('stage', stage)
+        }
+
+        if (grade) {
+          params.set('grade', grade)
+        }
+
+        if (track) {
+          params.set('track', track)
+        }
+
+        if (semester) {
+          params.set('semester', semester)
+        }
+
+        if (unitId) {
+          params.set('unitId', unitId)
+        }
+
+        if (lessonId) {
+          params.set('lessonId', lessonId)
+        }
+
+        const response = await fetch(
+          `/api/subject-materials?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        )
+
+        const data = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error || 'تعذر تحميل ملف المصدر المحدد.'
+          )
+        }
+
+        const allMaterials = Array.isArray(data?.materials)
+          ? data.materials
+          : []
+
+        const matchingMaterials = allMaterials.filter(
+          (material: SelectedMaterial) => materialIds.includes(material.id)
+        )
+
+        if (matchingMaterials.length === 0) {
+          throw new Error(
+            'تعذر العثور على ملف المصدر المختار. عد إلى صفحة المحتوى واختر الملف مرة أخرى.'
+          )
+        }
+
+        setSelectedMaterials(matchingMaterials)
+
+        setProjectTitle((currentTitle) => {
+          if (currentTitle.trim()) {
+            return currentTitle
+          }
+
+          const firstTitle =
+            matchingMaterials[0]?.title ||
+            matchingMaterials[0]?.file_name ||
+            lessonName ||
+            'مشروع تعليمي جديد'
+
+          return `${getOutputLabel(outputType)}: ${firstTitle}`
+        })
+      } catch (loadError: unknown) {
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : 'حدث خطأ أثناء تحميل ملفات المصدر.'
+
+        setError(message)
+      } finally {
+        setLoadingMaterials(false)
+      }
+    }
+
+    void loadSelectedMaterials()
+  }, [
+    grade,
+    lessonId,
+    lessonName,
+    materialIds,
+    outputType,
+    router,
+    semester,
+    stage,
+    subjectId,
+    track,
+    unitId,
+  ])
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] || null
+
+    setSourceFile(file)
+    setError(null)
+    setSuccess(null)
+
+    if (file) {
+      setProjectTitle((currentTitle) => {
+        if (currentTitle.trim()) {
+          return currentTitle
+        }
+
+        return `${getOutputLabel(outputType)}: ${file.name}`
+      })
     }
   }
 
-  function renderSourceInput() {
-    if (!sourceType) return null
+  function selectMaterialType(type: MaterialType) {
+    setMaterialType(type)
+    setError(null)
+    setSuccess(null)
+  }
 
-    if (sourceType === 'text') {
-      return (
-        <div>
-          <label
-            htmlFor="sourceText"
-            style={{
-              display: 'block',
-              fontSize: 14,
-              fontWeight: BRAND.weightSemibold,
-              color: APP.textCol,
-              marginBottom: 4,
-            }}
-          >
-            نص المادة التعليمية
-          </label>
-          <p
-            style={{
-              fontSize: 12,
-              color: BRAND.muted,
-              marginBottom: 6,
-            }}
-          >
-            ألصق هنا نص درس التورية أو الملخص الذي تريد أن يعمل عليه الاستديو.
-          </p>
-          <textarea
-            id="sourceText"
-            value={sourceText}
-            onChange={(e) => setSourceText(e.target.value)}
-            rows={6}
-            placeholder="اكتب أو ألصق نص المادة التعليمية هنا (مثلاً: نص التورية من كتاب الصف الثاني عشر)..."
-            style={{
-              width: '100%',
-              fontSize: 14,
-              paddingInline: 12,
-              paddingBlock: 10,
-              borderRadius: BRAND.radiusMd,
-              border: `1px solid ${APP.borderCol}`,
-              outline: 'none',
-              resize: 'vertical',
-              backgroundColor: APP.cardBg,
-            }}
-          />
-        </div>
-      )
+  function selectOutputType(type: OutputType) {
+    setOutputType(type)
+    setError(null)
+    setSuccess(null)
+
+    setProjectTitle((currentTitle) => {
+      if (currentTitle.trim()) {
+        return currentTitle
+      }
+
+      const sourceTitle =
+        selectedMaterials[0]?.title ||
+        selectedMaterials[0]?.file_name ||
+        sourceFile?.name ||
+        lessonName
+
+      if (!sourceTitle) {
+        return currentTitle
+      }
+
+      return `${getOutputLabel(type)}: ${sourceTitle}`
+    })
+  }
+
+  async function uploadNewSource(
+    projectId: string,
+    accessToken: string
+  ): Promise<void> {
+    if (materialType === 'text') {
+      const trimmedText = sourceText.trim()
+
+      if (!trimmedText) {
+        throw new Error('اكتب نص المادة التعليمية أولًا.')
+      }
+
+      const response = await fetch('/api/studio/upload-source', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          sourceType: 'text',
+          source_type: 'text',
+          sourceText: trimmedText,
+          source_text: trimmedText,
+        }),
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'تعذر حفظ النص المصدر.')
+      }
+
+      return
     }
 
-    const label =
-      sourceType === 'pdf'
-        ? 'ملف PDF / Word للمادة التعليمية'
-        : sourceType === 'image'
-        ? 'صورة (صفحة/شكل) للمادة التعليمية'
-        : 'ملف فيديو قصير للمادة التعليمية'
+    if (!sourceFile) {
+      throw new Error('الرجاء اختيار ملف المادة التعليمية أولًا.')
+    }
 
-    const accept =
-      sourceType === 'pdf'
-        ? '.pdf,.doc,.docx'
-        : sourceType === 'image'
-        ? 'image/*'
-        : 'video/*'
+    const formData = new FormData()
+    const apiSourceType = getApiSourceType(materialType)
 
-    return (
-      <div>
-        <span
-          style={{
-            display: 'block',
-            fontSize: 14,
-            fontWeight: BRAND.weightSemibold,
-            color: APP.textCol,
-            marginBottom: 4,
-          }}
-        >
-          {label}
-        </span>
-        <p
-          style={{
-            fontSize: 12,
-            color: BRAND.muted,
-            marginBottom: 6,
-          }}
-        >
-          اختر الملف الذي يمثل المادة التعليمية لهذا المشروع (مثلاً: صفحة
-          التورية من كتاب الصف الثاني عشر بصيغة Word أو PDF).
-        </p>
-        <input
-          type="file"
-          accept={accept}
-          onChange={(e) => {
-            const file = e.target.files?.[0] || null
-            setSourceFile(file)
-          }}
-          style={{
-            fontSize: 13,
-          }}
-        />
-        {sourceFile && (
-          <p
-            style={{
-              fontSize: 12,
-              color: APP.subCol,
-              marginTop: 4,
-            }}
-          >
-            تم اختيار الملف: {sourceFile.name}
-          </p>
-        )}
-      </div>
-    )
+    formData.append('projectId', projectId)
+    formData.append('project_id', projectId)
+    formData.append('sourceType', apiSourceType)
+    formData.append('source_type', apiSourceType)
+    formData.append('file', sourceFile)
+
+    const response = await fetch('/api/studio/upload-source', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'تعذر رفع ملف المصدر.')
+    }
+  }
+
+  async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    setError(null)
+    setSuccess(null)
+
+    const cleanTitle = projectTitle.trim()
+
+    if (!cleanTitle) {
+      setError('اكتب عنوان المشروع أولًا.')
+      return
+    }
+
+    const hasExistingMaterials = selectedMaterials.length > 0
+    const hasNewTextSource =
+      materialType === 'text' && sourceText.trim().length > 0
+    const hasNewFileSource =
+      materialType !== 'text' && sourceFile instanceof File
+
+    if (!hasExistingMaterials && !hasNewTextSource && !hasNewFileSource) {
+      setError(
+        'الرجاء اختيار ملف مصدر من صفحة المحتوى أو رفع ملف جديد أو إدخال النص أولًا.'
+      )
+      return
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      router.replace('/login')
+      return
+    }
+
+    setCreating(true)
+
+    try {
+      const apiOutputType = getApiOutputType(outputType)
+      const apiSourceType = getApiSourceType(materialType)
+      const selectedMaterialIds = selectedMaterials.map(
+        (material) => material.id
+      )
+
+      const response = await fetch('/api/studio/projects', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: cleanTitle,
+
+          // الحقول الأساسية لمسار API الاستوديو
+          outputType: apiOutputType,
+          sourceType: apiSourceType,
+
+          // توافق مع مسارات API التي تستخدم snake_case
+          output_type: apiOutputType,
+          source_type: apiSourceType,
+
+          subjectId: subjectId || null,
+          subjectName: subjectName || null,
+          stage: stage || null,
+          grade: grade || null,
+          track: track || null,
+          semester: semester || null,
+          unitId: unitId || null,
+          unitName: unitName || null,
+          lessonId: lessonId || null,
+          lessonName: lessonName || null,
+
+          materialIds: selectedMaterialIds,
+
+          // توافق مع مسارات API التي تستخدم snake_case
+          subject_id: subjectId || null,
+          subject_name: subjectName || null,
+          unit_id: unitId || null,
+          unit_name: unitName || null,
+          lesson_id: lessonId || null,
+          lesson_name: lessonName || null,
+          material_ids: selectedMaterialIds,
+        }),
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'تعذر إنشاء المشروع.')
+      }
+
+      const projectId = data?.project?.id || data?.id
+
+      if (!projectId || typeof projectId !== 'string') {
+        throw new Error('تم إنشاء المشروع دون العثور على معرّفه.')
+      }
+
+      if (!hasExistingMaterials) {
+        await uploadNewSource(projectId, session.access_token)
+      }
+
+      setSuccess('تم إنشاء المشروع بنجاح. جارٍ فتح صفحة المشروع...')
+
+      router.push(`/studio/projects/${projectId}`)
+    } catch (createError: unknown) {
+      const message =
+        createError instanceof Error
+          ? createError.message
+          : 'حدث خطأ غير متوقع أثناء إنشاء المشروع.'
+
+      console.error('Studio project creation error:', createError)
+      setError(message)
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -240,30 +533,27 @@ export default function NewStudioProjectPage() {
       dir="rtl"
       style={{
         minHeight: '100vh',
-        backgroundColor: APP.bg,
-        paddingInline: BRAND.spaceLg,
-        paddingBlock: BRAND.spaceLg,
+        background: BRAND.bg,
+        color: BRAND.text,
         fontFamily: BRAND.fontBody,
+        padding: '48px 20px',
       }}
     >
-      <div
+      <section
         style={{
-          maxWidth: 720,
-          marginInline: 'auto',
+          width: '100%',
+          maxWidth: 900,
+          margin: '0 auto',
         }}
       >
-        <header
-          style={{
-            marginBottom: BRAND.spaceMd,
-          }}
-        >
+        <header style={{ textAlign: 'center', marginBottom: 28 }}>
           <h1
             style={{
-              fontSize: 26,
-              fontWeight: BRAND.weightBold,
-              color: APP.textCol,
-              marginBottom: 8,
+              margin: 0,
+              color: BRAND.text,
               fontFamily: BRAND.fontHeading,
+              fontSize: 32,
+              fontWeight: 900,
             }}
           >
             مشروع جديد في مِداد استديو
@@ -271,444 +561,504 @@ export default function NewStudioProjectPage() {
 
           <p
             style={{
-              fontSize: 15,
-              color: APP.subCol,
+              margin: '12px auto 0',
+              maxWidth: 760,
+              color: BRAND.crimson,
+              fontSize: 16,
+              lineHeight: 1.9,
             }}
           >
-            ابدأ مشروعاً جديداً عن طريق اختيار نوع المادة التي تريد استخدامها
-            ونوع الناتج الذي تريد الحصول عليه (ملخص، اختبار، أو فيديو شرح).
+            ابدأ مشروعًا جديدًا عن طريق اختيار نوع المادة التي تريد استخدامها
+            ونوع الناتج الذي تريد الحصول عليه.
           </p>
         </header>
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleCreateProject}
           style={{
-            backgroundColor: APP.cardBg,
-            borderRadius: BRAND.radiusLg,
-            padding: BRAND.spaceMd,
-            border: `1px solid ${APP.borderCol}`,
-            boxShadow: APP.shadow,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: BRAND.spaceSm,
+            border: `1px solid ${BRAND.crimson}`,
+            borderRadius: 22,
+            background: BRAND.bgCard,
+            boxShadow: BRAND.shadow,
+            padding: '26px 20px',
           }}
         >
-          {/* عنوان المشروع */}
-          <div>
-            <label
-              htmlFor="title"
+          {error ? (
+            <div
+              role="alert"
               style={{
-                display: 'block',
+                marginBottom: 18,
+                padding: '13px 15px',
+                borderRadius: 12,
+                border: '1px solid #FEB2B2',
+                background: '#FFF5F5',
+                color: '#9B2C2C',
                 fontSize: 14,
-                fontWeight: BRAND.weightSemibold,
-                color: APP.textCol,
-                marginBottom: 4,
+                lineHeight: 1.8,
               }}
             >
-              عنوان المشروع (اختياري)
-            </label>
-            <input
-              id="title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="مثال: التورية صف 12 – ملخص و اختبار"
-              style={{
-                width: '100%',
-                fontSize: 14,
-                paddingInline: 12,
-                paddingBlock: 10,
-                borderRadius: BRAND.radiusMd,
-                border: `1px solid ${APP.borderCol}`,
-                outline: 'none',
-                backgroundColor: '#FFFFFF',
-              }}
-            />
-          </div>
+              {error}
+            </div>
+          ) : null}
 
-          {/* نوع المادة */}
-          <div>
+          {success ? (
+            <div
+              style={{
+                marginBottom: 18,
+                padding: '13px 15px',
+                borderRadius: 12,
+                border: '1px solid #9AE6B4',
+                background: '#F0FFF4',
+                color: '#276749',
+                fontSize: 14,
+              }}
+            >
+              {success}
+            </div>
+          ) : null}
+
+          <label
+            style={{
+              display: 'block',
+              marginBottom: 22,
+            }}
+          >
             <span
               style={{
                 display: 'block',
-                fontSize: 14,
-                fontWeight: BRAND.weightSemibold,
-                color: APP.textCol,
-                marginBottom: 4,
+                marginBottom: 8,
+                color: BRAND.text,
+                fontSize: 15,
+                fontWeight: 800,
+              }}
+            >
+              عنوان المشروع
+            </span>
+
+            <input
+              value={projectTitle}
+              onChange={(event) => setProjectTitle(event.target.value)}
+              placeholder="مثال: ملخص درس النفر الثلاثة"
+              disabled={creating}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '14px 16px',
+                border: `1px solid ${BRAND.crimson}`,
+                borderRadius: 14,
+                background: '#FFFFFF',
+                color: BRAND.text,
+                fontFamily: BRAND.fontBody,
+                fontSize: 15,
+                outline: 'none',
+              }}
+            />
+          </label>
+
+          {subjectName || lessonName ? (
+            <div
+              style={{
+                marginBottom: 22,
+                padding: '13px 15px',
+                borderRadius: 14,
+                background: 'rgba(37, 99, 235, 0.08)',
+                border: '1px solid rgba(37, 99, 235, 0.18)',
+                color: BRAND.text,
+                fontSize: 13,
+                lineHeight: 1.9,
+              }}
+            >
+              <strong>سياق المشروع:</strong>{' '}
+              {[subjectName, stage, grade, semester, unitName, lessonName]
+                .filter(Boolean)
+                .join(' ← ')}
+            </div>
+          ) : null}
+
+          <section style={{ marginBottom: 24 }}>
+            <h2
+              style={{
+                margin: '0 0 8px',
+                fontFamily: BRAND.fontHeading,
+                fontSize: 18,
+                fontWeight: 900,
               }}
             >
               نوع المادة التي ستستخدمها
-            </span>
+            </h2>
+
             <p
               style={{
-                fontSize: 13,
+                margin: '0 0 14px',
                 color: BRAND.muted,
-                marginBottom: 6,
+                fontSize: 13,
+                lineHeight: 1.8,
               }}
             >
-              يمكنك رفع ملف Word/PDF أو إدخال نص أو استخدام صورة/فيديو بحسب
-              اختيارك هنا.
+              يمكنك الاعتماد على الملف المحدد سابقًا، أو رفع ملف جديد، أو إدخال
+              نص المادة مباشرة.
             </p>
 
             <div
               style={{
                 display: 'flex',
+                gap: 10,
                 flexWrap: 'wrap',
-                gap: 8,
               }}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceType('pdf')
-                  setSourceText('')
-                  setSourceFile(null)
-                }}
-                style={{
-                  paddingInline: 16,
-                  paddingBlock: 8,
-                  borderRadius: BRAND.radiusPill,
-                  border:
-                    sourceType === 'pdf'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    sourceType === 'pdf'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: APP.textCol,
-                }}
-              >
-                ملف PDF / Word
-              </button>
+              {(
+                [
+                  ['file', 'ملف Word / PDF'],
+                  ['text', 'نص مكتوب'],
+                  ['image', 'صورة (صفحة/شكل)'],
+                  ['video', 'فيديو قصير'],
+                ] as const
+              ).map(([type, label]) => {
+                const isActive = materialType === type
 
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceType('text')
-                  setSourceText('')
-                  setSourceFile(null)
-                }}
-                style={{
-                  paddingInline: 16,
-                  paddingBlock: 8,
-                  borderRadius: BRAND.radiusPill,
-                  border:
-                    sourceType === 'text'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    sourceType === 'text'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: APP.textCol,
-                }}
-              >
-                نص مكتوب
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceType('image')
-                  setSourceText('')
-                  setSourceFile(null)
-                }}
-                style={{
-                  paddingInline: 16,
-                  paddingBlock: 8,
-                  borderRadius: BRAND.radiusPill,
-                  border:
-                    sourceType === 'image'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    sourceType === 'image'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: APP.textCol,
-                }}
-              >
-                صورة (صفحة/شكل)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceType('video')
-                  setSourceText('')
-                  setSourceFile(null)
-                }}
-                style={{
-                  paddingInline: 16,
-                  paddingBlock: 8,
-                  borderRadius: BRAND.radiusPill,
-                  border:
-                    sourceType === 'video'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    sourceType === 'video'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: APP.textCol,
-                }}
-              >
-                فيديو قصير
-              </button>
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={creating}
+                    onClick={() => selectMaterialType(type)}
+                    style={{
+                      padding: '11px 18px',
+                      borderRadius: 999,
+                      border: `2px solid ${
+                        isActive ? BRAND.crimson : BRAND.border
+                      }`,
+                      background: isActive
+                        ? 'rgba(150, 30, 45, 0.08)'
+                        : '#FFFFFF',
+                      color: isActive ? BRAND.crimson : BRAND.text,
+                      cursor: creating ? 'not-allowed' : 'pointer',
+                      fontFamily: BRAND.fontBody,
+                      fontSize: 14,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
             </div>
-          </div>
+          </section>
 
-          {/* حقل المادة الفعلي */}
-          {renderSourceInput()}
+          {loadingMaterials ? (
+            <div
+              style={{
+                marginBottom: 20,
+                padding: 14,
+                borderRadius: 14,
+                background: 'rgba(37, 99, 235, 0.06)',
+                color: BRAND.muted,
+                fontSize: 14,
+              }}
+            >
+              جارٍ تحميل ملف المصدر المختار...
+            </div>
+          ) : null}
 
-          {/* نوع الناتج */}
-          <div>
-            <span
+          {selectedMaterials.length > 0 ? (
+            <section
+              style={{
+                marginBottom: 22,
+                padding: '16px',
+                borderRadius: 16,
+                border: '1px solid rgba(37, 99, 235, 0.30)',
+                background: 'rgba(37, 99, 235, 0.06)',
+              }}
+            >
+              <strong
+                style={{
+                  display: 'block',
+                  color: '#2563EB',
+                  marginBottom: 8,
+                  fontSize: 15,
+                }}
+              >
+                ملفات المصدر المختارة من صفحة المحتوى
+              </strong>
+
+              {selectedMaterials.map((material, index) => (
+                <div
+                  key={material.id}
+                  style={{
+                    padding: '10px 0',
+                    borderBottom:
+                      index === selectedMaterials.length - 1
+                        ? 'none'
+                        : '1px solid rgba(37, 99, 235, 0.16)',
+                    color: BRAND.text,
+                    fontSize: 14,
+                  }}
+                >
+                  {material.title || material.file_name || 'ملف مصدر'}
+
+                  <span
+                    style={{
+                      display: 'block',
+                      marginTop: 4,
+                      color: BRAND.muted,
+                      fontSize: 12,
+                    }}
+                  >
+                    {material.file_name || 'ملف مرتبط بالمادة'}
+                  </span>
+                </div>
+              ))}
+            </section>
+          ) : null}
+
+          {materialType === 'text' ? (
+            <label
               style={{
                 display: 'block',
-                fontSize: 14,
-                fontWeight: BRAND.weightSemibold,
-                color: APP.textCol,
-                marginBottom: 4,
+                marginBottom: 24,
+              }}
+            >
+              <span
+                style={{
+                  display: 'block',
+                  marginBottom: 8,
+                  color: BRAND.text,
+                  fontSize: 15,
+                  fontWeight: 800,
+                }}
+              >
+                نص المادة التعليمية
+              </span>
+
+              <textarea
+                value={sourceText}
+                disabled={creating}
+                onChange={(event) => setSourceText(event.target.value)}
+                placeholder="الصق نص الدرس أو المادة التعليمية هنا..."
+                rows={10}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  padding: '14px 16px',
+                  border: `1px solid ${BRAND.crimson}`,
+                  borderRadius: 14,
+                  background: '#FFFFFF',
+                  color: BRAND.text,
+                  fontFamily: BRAND.fontBody,
+                  fontSize: 15,
+                  lineHeight: 1.9,
+                  outline: 'none',
+                }}
+              />
+            </label>
+          ) : (
+            <label
+              style={{
+                display: 'block',
+                marginBottom: 24,
+              }}
+            >
+              <span
+                style={{
+                  display: 'block',
+                  marginBottom: 8,
+                  color: BRAND.text,
+                  fontSize: 15,
+                  fontWeight: 800,
+                }}
+              >
+                {getMaterialTypeLabel(materialType)}
+              </span>
+
+              <input
+                type="file"
+                disabled={creating}
+                accept={
+                  materialType === 'file'
+                    ? ACCEPTED_FILE_TYPES
+                    : materialType === 'image'
+                      ? 'image/*'
+                      : 'video/*'
+                }
+                onChange={handleFileChange}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '12px',
+                  border: `1px solid ${BRAND.crimson}`,
+                  borderRadius: 14,
+                  background: '#FFFFFF',
+                  color: BRAND.text,
+                  fontFamily: BRAND.fontBody,
+                  fontSize: 14,
+                }}
+              />
+
+              <p
+                style={{
+                  margin: '8px 0 0',
+                  color: BRAND.muted,
+                  fontSize: 12,
+                  lineHeight: 1.8,
+                }}
+              >
+                {sourceFile
+                  ? `الملف المحدد: ${getFileName(sourceFile)}`
+                  : selectedMaterials.length > 0
+                    ? 'سيُستخدم ملف المصدر المحدد سابقًا تلقائيًا.'
+                    : 'اختر ملفًا جديدًا إذا لم تكن قد اخترت ملف مصدر سابقًا.'}
+              </p>
+            </label>
+          )}
+
+          <section style={{ marginBottom: 24 }}>
+            <h2
+              style={{
+                margin: '0 0 14px',
+                fontFamily: BRAND.fontHeading,
+                fontSize: 18,
+                fontWeight: 900,
               }}
             >
               نوع الناتج الذي تريد إنشاؤه
-            </span>
+            </h2>
 
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: 10,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+                gap: 12,
               }}
             >
-              {/* ملخص درس */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: 10,
-                  borderRadius: BRAND.radiusMd,
-                  border:
-                    outputType === 'lesson_summary'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    outputType === 'lesson_summary'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="outputType"
-                  value="lesson_summary"
-                  checked={outputType === 'lesson_summary'}
-                  onChange={() => setOutputType('lesson_summary')}
-                  style={{ marginTop: 4 }}
-                />
-                <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: BRAND.weightSemibold,
-                      color: APP.textCol,
-                    }}
-                  >
-                    ملخص درس
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: BRAND.muted,
-                    }}
-                  >
-                    استخراج ملخص منظم من المادة لتستخدمه في الشرح أو المراجعة.
-                  </div>
-                </div>
-              </label>
+              {(
+                [
+                  [
+                    'summary',
+                    'ملخص درس',
+                    'استخراج ملخص منظم من المادة لاستخدامه في الشرح أو المراجعة.',
+                  ],
+                  [
+                    'quiz',
+                    'اختبار',
+                    'توليد أسئلة واختبارات مبنية على المادة التعليمية.',
+                  ],
+                  [
+                    'video',
+                    'فيديو شرح مختصر',
+                    'تجهيز سيناريو فيديو تعليمي مختصر من المادة.',
+                  ],
+                ] as const
+              ).map(([type, title, description]) => {
+                const isActive = outputType === type
 
-              {/* اختبار (اختيار من متعدد) */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: 10,
-                  borderRadius: BRAND.radiusMd,
-                  border:
-                    outputType === 'mcq_quiz'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    outputType === 'mcq_quiz'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="outputType"
-                  value="mcq_quiz"
-                  checked={outputType === 'mcq_quiz'}
-                  onChange={() => setOutputType('mcq_quiz')}
-                  style={{ marginTop: 4 }}
-                />
-                <div>
-                  <div
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={creating}
+                    onClick={() => selectOutputType(type)}
                     style={{
-                      fontSize: 14,
-                      fontWeight: BRAND.weightSemibold,
-                      color: APP.textCol,
+                      textAlign: 'right',
+                      padding: '16px',
+                      borderRadius: 16,
+                      border: `2px solid ${
+                        isActive ? BRAND.crimson : BRAND.border
+                      }`,
+                      background: isActive
+                        ? 'rgba(150, 30, 45, 0.08)'
+                        : '#FFFFFF',
+                      color: BRAND.text,
+                      cursor: creating ? 'not-allowed' : 'pointer',
+                      fontFamily: BRAND.fontBody,
                     }}
                   >
-                    اختبار (اختيار من متعدد)
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: BRAND.muted,
-                    }}
-                  >
-                    توليد أسئلة واختيارات مبنية على نفس المادة التعليمية.
-                  </div>
-                </div>
-              </label>
+                    <strong
+                      style={{
+                        display: 'block',
+                        marginBottom: 7,
+                        color: isActive ? BRAND.crimson : BRAND.text,
+                        fontSize: 15,
+                      }}
+                    >
+                      {title}
+                    </strong>
 
-              {/* فيديو شرح مختصر */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: 10,
-                  borderRadius: BRAND.radiusMd,
-                  border:
-                    outputType === 'short_explainer_video'
-                      ? `2px solid ${APP.accent}`
-                      : `1px solid ${APP.borderCol}`,
-                  backgroundColor:
-                    outputType === 'short_explainer_video'
-                      ? 'rgba(198,42,68,0.08)'
-                      : '#FFFFFF',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="outputType"
-                  value="short_explainer_video"
-                  checked={outputType === 'short_explainer_video'}
-                  onChange={() => setOutputType('short_explainer_video')}
-                  style={{ marginTop: 4 }}
-                />
-                <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: BRAND.weightSemibold,
-                      color: APP.textCol,
-                    }}
-                  >
-                    فيديو شرح مختصر
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: BRAND.muted,
-                    }}
-                  >
-                    تجهيز فيديو شرح قصير من المادة، مع معالجة لاحقة للفيديو.
-                  </div>
-                </div>
-              </label>
+                    <span
+                      style={{
+                        display: 'block',
+                        color: BRAND.muted,
+                        fontSize: 12,
+                        lineHeight: 1.8,
+                      }}
+                    >
+                      {description}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-          </div>
+          </section>
 
-          {/* رسائل */}
-          {error && (
-            <p
-              style={{
-                fontSize: 13,
-                color: '#C53030',
-              }}
-            >
-              {error}
-            </p>
-          )}
-
-          {successMessage && (
-            <p
-              style={{
-                fontSize: 13,
-                color: '#2F855A',
-              }}
-            >
-              {successMessage}
-            </p>
-          )}
-
-          {/* أزرار الإرسال */}
           <div
             style={{
               display: 'flex',
-              justifyContent: 'flex-start',
-              gap: 8,
-              marginTop: 4,
+              justifyContent: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+              paddingTop: 8,
             }}
           >
             <button
-              type="submit"
-              disabled={submitting}
+              type="button"
+              disabled={creating}
+              onClick={() => router.push('/teacher/content')}
               style={{
-                paddingInline: 20,
-                paddingBlock: 10,
-                borderRadius: BRAND.radiusPill,
-                border: 'none',
-                cursor: submitting ? 'default' : 'pointer',
-                backgroundImage: APP.btnBlue,
-                color: '#FFFFFF',
-                fontSize: 15,
-                fontWeight: BRAND.weightBold,
+                padding: '14px 22px',
+                border: `1px solid ${BRAND.crimson}`,
+                borderRadius: 999,
+                background: '#FFFFFF',
+                color: BRAND.text,
+                cursor: creating ? 'not-allowed' : 'pointer',
                 fontFamily: BRAND.fontHeading,
-                boxShadow: APP.btnGlow,
+                fontSize: 15,
+                fontWeight: 800,
               }}
             >
-              {submitting ? 'جاري إنشاء المشروع...' : 'إنشاء المشروع'}
+              إلغاء والعودة للمحتوى
             </button>
 
             <button
-              type="button"
-              onClick={() => router.push('/studio')}
+              type="submit"
+              disabled={creating || loadingMaterials}
               style={{
-                paddingInline: 16,
-                paddingBlock: 9,
-                borderRadius: BRAND.radiusPill,
-                border: `1px solid ${APP.borderCol}`,
-                cursor: 'pointer',
-                backgroundColor: '#FFFFFF',
-                color: APP.textCol,
-                fontSize: 14,
-                fontFamily: BRAND.fontBody,
+                padding: '14px 26px',
+                border: 'none',
+                borderRadius: 999,
+                background: BRAND.gradBlue,
+                color: '#FFFFFF',
+                boxShadow: BRAND.shadowBlue,
+                cursor:
+                  creating || loadingMaterials ? 'not-allowed' : 'pointer',
+                opacity: creating || loadingMaterials ? 0.65 : 1,
+                fontFamily: BRAND.fontHeading,
+                fontSize: 16,
+                fontWeight: 900,
               }}
             >
-              إلغاء والعودة للاستديو
+              {creating ? 'جارٍ إنشاء المشروع...' : 'إنشاء المشروع'}
             </button>
           </div>
         </form>
-      </div>
+      </section>
     </main>
+  )
+}
+
+export default function NewStudioProjectPage() {
+  return (
+    <Suspense fallback={<StudioProjectLoading />}>
+      <NewStudioProjectContent />
+    </Suspense>
   )
 }

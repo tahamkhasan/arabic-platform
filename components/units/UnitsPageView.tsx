@@ -1,4 +1,5 @@
 'use client'
+
 import type { UnitFormState, UnitItem } from '@/types/units'
 import { BRAND } from '@/lib/constants/theme'
 import Button from '@/components/ui/Button'
@@ -6,6 +7,7 @@ import UnitCard from './UnitCard'
 import UnitFormModal from './UnitFormModal'
 
 type Props = {
+  subjectId: string
   subjectName: string
   units: UnitItem[]
   filteredUnits: UnitItem[]
@@ -21,6 +23,7 @@ type Props = {
   onSemesterTabChange: (semester: 1 | 2) => void
   onBack: () => void
   onRefresh: () => void
+  onOpenMaterials: () => void
   onCreate: () => void
   onEdit: (unit: UnitItem) => void
   onDelete: (unit: UnitItem) => void
@@ -29,7 +32,10 @@ type Props = {
   onCloseModal: () => void
   onSubmit: () => void
   onSearchChange: (value: string) => void
-  onFormChange: <K extends keyof UnitFormState>(key: K, value: UnitFormState[K]) => void
+  onFormChange: <K extends keyof UnitFormState>(
+    key: K,
+    value: UnitFormState[K]
+  ) => void
 }
 
 export default function UnitsPageView(props: Props) {
@@ -49,6 +55,7 @@ export default function UnitsPageView(props: Props) {
     onSemesterTabChange,
     onBack,
     onRefresh,
+    onOpenMaterials,
     onCreate,
     onEdit,
     onDelete,
@@ -86,46 +93,105 @@ export default function UnitsPageView(props: Props) {
           }}
         >
           <div>
-            <div style={{ fontSize: 13, color: BRAND.sub, marginBottom: 4 }}>الفصول الدراسية لمادة</div>
-            <div style={{ fontSize: 24, fontWeight: BRAND.weightBlack, fontFamily: BRAND.fontHeading, color: BRAND.crimson }}>
+            <div style={{ fontSize: 13, color: BRAND.sub, marginBottom: 4 }}>
+              الفصول الدراسية لمادة
+            </div>
+
+            <div
+              style={{
+                fontSize: 24,
+                fontWeight: BRAND.weightBlack,
+                fontFamily: BRAND.fontHeading,
+                color: BRAND.crimson,
+              }}
+            >
               📖 {subjectName}
             </div>
-            <div style={{ fontSize: 13, color: BRAND.sub, marginTop: 4 }}>{units.length} وحدة إجمالاً</div>
+
+            <div style={{ fontSize: 13, color: BRAND.sub, marginTop: 4 }}>
+              {units.length} وحدة إجمالاً
+            </div>
           </div>
+
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Button variant="ghost" size="sm" onClick={onBack}>← رجوع للمواد</Button>
-            <Button variant="ghost" size="sm" onClick={onRefresh}>↻ تحديث</Button>
-            <Button variant="primary" size="sm" onClick={onCreate}>＋ وحدة جديدة</Button>
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              ← رجوع للمواد
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={onRefresh}>
+              ↻ تحديث
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={onOpenMaterials}>
+              📎 ملفات المادة
+            </Button>
+
+            <Button variant="primary" size="sm" onClick={onCreate}>
+              ＋ وحدة جديدة
+            </Button>
           </div>
         </div>
 
-        {/* ── تبويبا الفصل الدراسي — ثابتان دائماً، للتنقل الإداري فقط ── */}
+        <div
+          style={{
+            padding: '12px 16px',
+            marginBottom: 20,
+            borderRadius: BRAND.radiusMd,
+            border: `1px solid rgba(140,20,40,0.16)`,
+            background: 'rgba(140,20,40,0.04)',
+            color: BRAND.sub,
+            fontSize: 13,
+            lineHeight: 1.85,
+          }}
+        >
+          <strong style={{ color: BRAND.crimson }}>📎 ملفات المادة:</strong>
+          {' '}
+          يرفع الأدمن الملفات الرسمية للمنهج، مثل كتاب الطالب ودليل المعلم.
+          ويمكن للمعلم المسند إليه المادة رفع ملفات مساندة خاصة به عند السماح بذلك.
+        </div>
+
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {([[1, 'الفصل الدراسي الأول', semester1Count], [2, 'الفصل الدراسي الثاني', semester2Count]] as const).map(
-            ([val, label, count]) => (
-              <button
-                key={val}
-                onClick={() => onSemesterTabChange(val)}
+          {(
+            [
+              [1, 'الفصل الدراسي الأول', semester1Count],
+              [2, 'الفصل الدراسي الثاني', semester2Count],
+            ] as const
+          ).map(([val, label, count]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => onSemesterTabChange(val)}
+              style={{
+                flex: 1,
+                padding: '14px',
+                borderRadius: BRAND.radiusMd,
+                border: `2px solid ${
+                  activeSemesterTab === val ? BRAND.crimson : BRAND.border
+                }`,
+                background:
+                  activeSemesterTab === val
+                    ? 'rgba(140,20,40,0.08)'
+                    : BRAND.bgSoft,
+                color: activeSemesterTab === val ? BRAND.crimson : BRAND.sub,
+                fontWeight: BRAND.weightBlack,
+                fontSize: 14,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {label}
+              <span
                 style={{
-                  flex: 1,
-                  padding: '14px',
-                  borderRadius: BRAND.radiusMd,
-                  border: `2px solid ${activeSemesterTab === val ? BRAND.crimson : BRAND.border}`,
-                  background: activeSemesterTab === val ? 'rgba(140,20,40,0.08)' : BRAND.bgSoft,
-                  color: activeSemesterTab === val ? BRAND.crimson : BRAND.sub,
-                  fontWeight: BRAND.weightBlack,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
+                  fontSize: 12,
+                  fontWeight: BRAND.weightSemibold,
+                  marginRight: 6,
+                  opacity: 0.7,
                 }}
               >
-                {label}
-                <span style={{ fontSize: 12, fontWeight: BRAND.weightSemibold, marginRight: 6, opacity: 0.7 }}>
-                  ({count})
-                </span>
-              </button>
-            )
-          )}
+                ({count})
+              </span>
+            </button>
+          ))}
         </div>
 
         {msg ? (
@@ -136,9 +202,15 @@ export default function UnitsPageView(props: Props) {
               marginBottom: 16,
               fontSize: 14,
               fontWeight: BRAND.weightBold,
-              background: msg.startsWith('تم') ? 'rgba(220,140,60,0.10)' : 'rgba(140,20,40,0.08)',
+              background: msg.startsWith('تم')
+                ? 'rgba(220,140,60,0.10)'
+                : 'rgba(140,20,40,0.08)',
               color: msg.startsWith('تم') ? BRAND.gold : BRAND.crimson,
-              border: `1px solid ${msg.startsWith('تم') ? 'rgba(220,140,60,0.3)' : 'rgba(140,20,40,0.25)'}`,
+              border: `1px solid ${
+                msg.startsWith('تم')
+                  ? 'rgba(220,140,60,0.3)'
+                  : 'rgba(140,20,40,0.25)'
+              }`,
             }}
           >
             {msg}
@@ -163,7 +235,9 @@ export default function UnitsPageView(props: Props) {
         />
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60, color: BRAND.sub }}>جارٍ تحميل الوحدات...</div>
+          <div style={{ textAlign: 'center', padding: 60, color: BRAND.sub }}>
+            جارٍ تحميل الوحدات...
+          </div>
         ) : filteredUnits.length === 0 ? (
           <div
             style={{
@@ -175,7 +249,7 @@ export default function UnitsPageView(props: Props) {
               color: BRAND.sub,
             }}
           >
-            لا توجد وحدات في هذا الفصل. اضغط "＋ وحدة جديدة" لإضافة أول وحدة.
+            لا توجد وحدات في هذا الفصل. اضغط «＋ وحدة جديدة» لإضافة أول وحدة.
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>

@@ -84,6 +84,12 @@ function AdminSubjectUnitsContent() {
 
   return (
     <UnitsPageView
+    subjectId={subjectId}
+onOpenMaterials={() =>
+  router.push(
+    `/admin/subjects/${subjectId}/materials?subjectName=${encodeURIComponent(subjectName)}`
+  )
+}
       subjectName={subjectName}
       units={units}
       filteredUnits={filteredUnits}

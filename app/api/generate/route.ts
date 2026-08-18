@@ -67,6 +67,7 @@ async function saveGeneration(params: {
 export async function POST(req: NextRequest) {
   try {
     const { tool, grade, stage, prompt, userId, material } = await req.json()
+    console.log('[generate] incoming tool:', tool)
 
     // ── التحقق من المدخلات ──
     if (!tool || !grade || !prompt) {

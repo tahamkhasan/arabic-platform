@@ -12,7 +12,11 @@ const PUBLIC_PATHS = [
   '/activity',
 ]
 
-const PUBLIC_API_PATHS = ['/api/register', '/api/keep-alive']
+const PUBLIC_API_PATHS = [
+  '/api/register',
+  '/api/keep-alive',
+  '/api/teacher-trial/register',
+]
 
 const PUBLIC_API_PREFIXES = [
   '/api/auth/forgot-password',
@@ -127,6 +131,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|images/|robots.txt|sitemap.xml).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|apple-touch-icon.png|manifest.webmanifest|sw.js|icons/|screenshots/).*)',
   ],
 }
