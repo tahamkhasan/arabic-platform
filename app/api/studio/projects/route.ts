@@ -19,8 +19,6 @@ type CreateProjectBody = {
   outputType?: unknown
   sourceType?: unknown
   materialIds?: unknown
-
-  // دعم البيانات التي قد ترسلها واجهات سابقة
   output_type?: unknown
   source_type?: unknown
   material_ids?: unknown
@@ -118,8 +116,61 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-export async function GET() {
+function getBearerToken(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null
+  }
+
+  return authHeader.slice(7).trim()
+}
+
+async function getAuthenticatedUser(req: NextRequest) {
+  const token = getBearerToken(req)
+
+  if (!token) {
+    return {
+      user: null,
+      token: null,
+      errorResponse: NextResponse.json(
+        { error: 'لم يتم إرسال رمز الدخول.' },
+        { status: 401 }
+      ),
+    }
+  }
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token)
+
+  if (error || !user) {
+    return {
+      user: null,
+      token: null,
+      errorResponse: NextResponse.json(
+        { error: 'تعذر التحقق من هوية المستخدم.' },
+        { status: 401 }
+      ),
+    }
+  }
+
+  return {
+    user,
+    token,
+    errorResponse: null,
+  }
+}
+
+export async function GET(req: NextRequest) {
   try {
+    const auth = await getAuthenticatedUser(req)
+
+    if (auth.errorResponse || !auth.user) {
+      return auth.errorResponse
+    }
+
     const { data: projectRows, error: projectsError } = await supabaseAdmin
       .from('studio_projects')
       .select(
@@ -133,7 +184,9 @@ export async function GET() {
           updated_at
         `
       )
+      .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
+      .limit(20)
 
     if (projectsError) {
       console.error('studio_projects GET error:', projectsError)
@@ -201,6 +254,12 @@ export async function POST(req: NextRequest) {
   let createdProjectId: string | null = null
 
   try {
+    const auth = await getAuthenticatedUser(req)
+
+    if (auth.errorResponse || !auth.user) {
+      return auth.errorResponse
+    }
+
     const body = (await req.json().catch(() => null)) as CreateProjectBody | null
 
     if (!body) {
@@ -286,7 +345,7 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin
         .from('studio_projects')
         .insert({
-          user_id: null,
+          user_id: auth.user.id,
           title: safeTitle,
           output_type: outputType,
           source_type: sourceType,
