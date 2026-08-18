@@ -590,7 +590,7 @@ export default function TeacherContentPage() {
       params.set('materialIds', selectedMaterialIds.join(','))
     }
 
-    router.push(`/studio/new?${params.toString()}`)
+    router.push(`/studio/projects/new?${params.toString()}`)
   }
 
   function selectStyle(disabled = false) {

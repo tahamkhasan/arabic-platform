@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { APP, BRAND } from '@/lib/constants/theme'
-import { supabase } from '@/lib/supabase'
 
 type StudioOutputType =
   | 'lesson_summary'
@@ -12,95 +11,13 @@ type StudioOutputType =
 
 type StudioSourceType = 'pdf' | 'text' | 'image' | 'video'
 
-type StudioProjectStatus = 'draft' | 'processing' | 'completed' | 'error'
-
 type StudioProject = {
   id: string
   title: string | null
   output_type: StudioOutputType | null
   source_type: StudioSourceType | null
-  status: StudioProjectStatus | null
+  status: 'draft' | 'processing' | 'completed' | 'error' | null
   created_at: string
-}
-
-function getOutputTypeLabel(type: StudioOutputType | null) {
-  const labels: Record<StudioOutputType, string> = {
-    lesson_summary: 'ملخص درس',
-    mcq_quiz: 'اختبار اختيار من متعدد',
-    short_explainer_video: 'فيديو شرح مختصر',
-  }
-
-  return type ? labels[type] || 'غير محدد' : 'غير محدد'
-}
-
-function getSourceTypeLabel(type: StudioSourceType | null) {
-  const labels: Record<StudioSourceType, string> = {
-    pdf: 'ملف PDF / Word',
-    text: 'نص مكتوب',
-    image: 'صورة أو صفحة',
-    video: 'فيديو قصير',
-  }
-
-  return type ? labels[type] || 'غير محدد' : 'غير محدد'
-}
-
-function getStatusConfig(status: StudioProjectStatus | null) {
-  const configs: Record<
-    StudioProjectStatus,
-    { label: string; background: string; color: string }
-  > = {
-    draft: {
-      label: 'مسودة',
-      background: '#FEF3C7',
-      color: '#92400E',
-    },
-    processing: {
-      label: 'قيد المعالجة',
-      background: '#DBEAFE',
-      color: '#1D4ED8',
-    },
-    completed: {
-      label: 'مكتمل',
-      background: '#DCFCE7',
-      color: '#166534',
-    },
-    error: {
-      label: 'به خطأ',
-      background: '#FEE2E2',
-      color: '#B91C1C',
-    },
-  }
-
-  return (
-    configs[status || 'draft'] || {
-      label: 'غير محدد',
-      background: '#F3F4F6',
-      color: '#374151',
-    }
-  )
-}
-
-function formatArabicDate(value: string | null | undefined) {
-  if (!value) {
-    return 'غير متوفر'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'غير متوفر'
-  }
-
-  return date.toLocaleString('ar-KW', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
-}
-
-function getAuthHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-  }
 }
 
 export default function StudioDashboardPage() {
@@ -108,171 +25,98 @@ export default function StudioDashboardPage() {
 
   const [projects, setProjects] = useState<StudioProject[]>([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-
-  const loadProjects = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) {
-      setRefreshing(true)
-    } else {
-      setLoading(true)
-    }
-
-    setError(null)
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      const token = session?.access_token
-
-      if (!token) {
-        router.replace('/login')
-        return
-      }
-
-      const res = await fetch('/api/studio/projects', {
-        method: 'GET',
-        headers: getAuthHeaders(token),
-        cache: 'no-store',
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر جلب مشروعات الاستديو من القاعدة.')
-      }
-
-      const items: StudioProject[] = Array.isArray(data?.projects)
-        ? data.projects
-        : []
-
-      setProjects(items)
-    } catch (fetchError) {
-      console.error('Studio projects fetch error:', fetchError)
-
-      setError(
-        fetchError instanceof Error
-          ? fetchError.message
-          : 'حدث خطأ غير متوقع أثناء جلب المشاريع.'
-      )
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [router])
 
   useEffect(() => {
-    void loadProjects()
-  }, [loadProjects])
-
-  const projectStats = useMemo(() => {
-    return {
-      total: projects.length,
-      draft: projects.filter((project) => project.status === 'draft').length,
-      completed: projects.filter((project) => project.status === 'completed')
-        .length,
-      processing: projects.filter((project) => project.status === 'processing')
-        .length,
+    async function fetchProjects() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/studio/projects')
+        if (!res.ok) {
+          const data = await res.json().catch(() => null)
+          setError(data?.error || 'تعذر جلب مشروعات الاستديو من القاعدة.')
+          setLoading(false)
+          return
+        }
+        const data = await res.json()
+        const items: StudioProject[] = data?.projects ?? []
+        setProjects(items)
+        setLoading(false)
+      } catch (err: any) {
+        console.error('Error fetching projects:', err)
+        setError('حدث خطأ غير متوقع أثناء جلب المشاريع.')
+        setLoading(false)
+      }
     }
-  }, [projects])
 
-  async function handleDeleteProject(project: StudioProject) {
-    if (project.status !== 'draft') {
-      setError('يمكن حذف المشاريع التي حالتها مسودة فقط من صفحة الاستديو.')
-      setSuccessMessage(null)
-      return
+    fetchProjects()
+  }, [])
+
+  function renderOutputType(type: StudioOutputType | null) {
+    if (!type) return 'غير محدد'
+
+    switch (type) {
+      case 'lesson_summary':
+        return 'ملخص درس'
+      case 'mcq_quiz':
+        return 'اختبار (اختيار من متعدد)'
+      case 'short_explainer_video':
+        return 'فيديو شرح مختصر'
+      default:
+        return 'غير محدد'
+    }
+  }
+
+  function renderStatusBadge(status: StudioProject['status']) {
+    if (!status) return null
+
+    const map: Record<
+      NonNullable<StudioProject['status']>,
+      { label: string; bg: string; col: string }
+    > = {
+      draft: {
+        label: 'مسودة',
+        bg: '#FDF6B2',
+        col: '#92400E',
+      },
+      processing: {
+        label: 'قيد المعالجة',
+        bg: '#DBEAFE',
+        col: '#1D4ED8',
+      },
+      completed: {
+        label: 'منجز',
+        bg: '#DEF7EC',
+        col: '#03543F',
+      },
+      error: {
+        label: 'به خطأ',
+        bg: '#FDE8E8',
+        col: '#9B1C1C',
+      },
     }
 
-    const confirmed = window.confirm(
-      'هل تريد حذف هذا المشروع نهائيًا؟ لا يمكن التراجع عن هذه الخطوة.'
+    const conf = map[status]
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingInline: 10,
+          paddingBlock: 4,
+          borderRadius: BRAND.radiusPill,
+          backgroundColor: conf.bg,
+          color: conf.col,
+          fontSize: 12,
+          fontWeight: BRAND.weightSemibold,
+        }}
+      >
+        {conf.label}
+      </span>
     )
-
-    if (!confirmed) {
-      return
-    }
-
-    setDeletingId(project.id)
-    setError(null)
-    setSuccessMessage(null)
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      const token = session?.access_token
-
-      if (!token) {
-        router.replace('/login')
-        return
-      }
-
-      const res = await fetch(`/api/studio/projects/${project.id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(token),
-      })
-
-      const data = await res.json().catch(() => null)
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر حذف المشروع من الاستديو.')
-      }
-
-      setProjects((currentProjects) =>
-        currentProjects.filter((item) => item.id !== project.id)
-      )
-
-      setSuccessMessage(data?.message || 'تم حذف المشروع بنجاح.')
-    } catch (deleteError) {
-      console.error('Studio project delete from dashboard error:', deleteError)
-
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : 'حدث خطأ غير متوقع أثناء حذف المشروع من الاستديو.'
-      )
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  const panelStyle = {
-    backgroundColor: APP.cardBg,
-    borderRadius: BRAND.radiusLg,
-    padding: BRAND.spaceMd,
-    border: `1px solid ${APP.borderCol}`,
-    boxShadow: APP.shadow,
-  }
-
-  const secondaryButtonStyle = {
-    paddingInline: 16,
-    paddingBlock: 9,
-    borderRadius: BRAND.radiusPill,
-    border: `1px solid ${APP.borderCol}`,
-    cursor: 'pointer',
-    backgroundColor: '#FFFFFF',
-    color: APP.textCol,
-    fontFamily: BRAND.fontBody,
-    fontSize: 14,
-    fontWeight: BRAND.weightSemibold,
-  }
-
-  const primaryButtonStyle = {
-    paddingInline: 18,
-    paddingBlock: 10,
-    borderRadius: BRAND.radiusPill,
-    border: 'none',
-    cursor: 'pointer',
-    backgroundImage: APP.btnBlue,
-    color: '#FFFFFF',
-    fontFamily: BRAND.fontHeading,
-    fontSize: 14,
-    fontWeight: BRAND.weightBold,
-    boxShadow: APP.btnGlow,
   }
 
   return (
@@ -284,384 +128,205 @@ export default function StudioDashboardPage() {
         paddingInline: BRAND.spaceLg,
         paddingBlock: BRAND.spaceLg,
         fontFamily: BRAND.fontBody,
-        color: APP.textCol,
       }}
     >
       <div
         style={{
-          maxWidth: 1100,
+          maxWidth: 1024,
           marginInline: 'auto',
         }}
       >
         <header
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            flexWrap: 'wrap',
-            gap: 16,
             marginBottom: BRAND.spaceMd,
           }}
         >
-          <div style={{ maxWidth: 720 }}>
-            <h1
-              style={{
-                fontSize: 28,
-                fontWeight: BRAND.weightBold,
-                color: APP.textCol,
-                margin: 0,
-                fontFamily: BRAND.fontHeading,
-              }}
-            >
-              مداد استديو · واجهة المعلم
-            </h1>
+          <h1
+            style={{
+              fontSize: 28,
+              fontWeight: BRAND.weightBold,
+              color: APP.textCol,
+              marginBottom: 8,
+              fontFamily: BRAND.fontHeading,
+            }}
+          >
+            مداد استديو · واجهة المعلم
+          </h1>
+          <p
+            style={{
+              fontSize: 15,
+              color: APP.subCol,
+            }}
+          >
+            حوِّل ملاحظاتك التعليمية إلى ملخصات واختبارات وفيديوهات شرح جاهزة
+            للاستخدام داخل دروسك، من مكان واحد بسيط وواضح.
+          </p>
+        </header>
 
-            <p
-              style={{
-                fontSize: 15,
-                color: APP.subCol,
-                lineHeight: 1.9,
-                margin: '8px 0 0',
-              }}
-            >
-              أنشئ مشاريعك التعليمية، ثم حوّلها إلى ملخصات دروس واختبارات
-              اختيار من متعدد ومخرجات جاهزة للاستخدام داخل الحصة من مكان واحد
-              واضح ومنظم.
-            </p>
-          </div>
+        <section
+          style={{
+            marginBottom: BRAND.spaceSm,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 13,
+              color: BRAND.muted,
+            }}
+          >
+            يتم جلب المشاريع من قاعدة بيانات مداد استديو.
+          </p>
 
           <div
             style={{
               display: 'flex',
               gap: 10,
-              flexWrap: 'wrap',
             }}
           >
             <button
               type="button"
               onClick={() => router.push('/studio/projects/new')}
-              style={primaryButtonStyle}
+              style={{
+                paddingInline: 18,
+                paddingBlock: 9,
+                borderRadius: BRAND.radiusPill,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundImage: APP.btnBlue,
+                color: '#FFFFFF',
+                fontSize: 14,
+                fontWeight: BRAND.weightBold,
+              }}
             >
               + مشروع جديد
             </button>
 
             <button
               type="button"
-              onClick={() => void loadProjects(true)}
+              onClick={() => router.refresh()}
               style={{
-                ...secondaryButtonStyle,
-                opacity: refreshing ? 0.75 : 1,
-                cursor: refreshing ? 'not-allowed' : 'pointer',
+                paddingInline: 14,
+                paddingBlock: 8,
+                borderRadius: BRAND.radiusPill,
+                border: `1px solid ${APP.borderCol}`,
+                cursor: 'pointer',
+                backgroundColor: '#FFFFFF',
+                color: APP.textCol,
+                fontSize: 14,
               }}
-              disabled={refreshing}
             >
-              {refreshing ? 'جارٍ التحديث...' : 'تحديث القائمة'}
+              استعراض مشاريعي
             </button>
           </div>
-        </header>
-
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 12,
-            marginBottom: BRAND.spaceMd,
-          }}
-        >
-          <div style={panelStyle}>
-            <div style={{ color: BRAND.muted, fontSize: 13, marginBottom: 6 }}>
-              إجمالي المشاريع
-            </div>
-            <div
-              style={{
-                color: APP.textCol,
-                fontFamily: BRAND.fontHeading,
-                fontSize: 24,
-                fontWeight: BRAND.weightBold,
-              }}
-            >
-              {projectStats.total}
-            </div>
-          </div>
-
-          <div style={panelStyle}>
-            <div style={{ color: BRAND.muted, fontSize: 13, marginBottom: 6 }}>
-              المشاريع المكتملة
-            </div>
-            <div
-              style={{
-                color: '#166534',
-                fontFamily: BRAND.fontHeading,
-                fontSize: 24,
-                fontWeight: BRAND.weightBold,
-              }}
-            >
-              {projectStats.completed}
-            </div>
-          </div>
-
-          <div style={panelStyle}>
-            <div style={{ color: BRAND.muted, fontSize: 13, marginBottom: 6 }}>
-              المشاريع قيد المعالجة
-            </div>
-            <div
-              style={{
-                color: '#1D4ED8',
-                fontFamily: BRAND.fontHeading,
-                fontSize: 24,
-                fontWeight: BRAND.weightBold,
-              }}
-            >
-              {projectStats.processing}
-            </div>
-          </div>
-
-          <div style={panelStyle}>
-            <div style={{ color: BRAND.muted, fontSize: 13, marginBottom: 6 }}>
-              المسودات
-            </div>
-            <div
-              style={{
-                color: '#92400E',
-                fontFamily: BRAND.fontHeading,
-                fontSize: 24,
-                fontWeight: BRAND.weightBold,
-              }}
-            >
-              {projectStats.draft}
-            </div>
-          </div>
         </section>
 
-        <section style={{ ...panelStyle, marginBottom: BRAND.spaceMd }}>
-          <div
+        {loading && (
+          <p
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap',
+              fontSize: 14,
+              color: APP.subCol,
             }}
           >
-            <div>
-              <h2
-                style={{
-                  margin: 0,
-                  color: APP.textCol,
-                  fontFamily: BRAND.fontHeading,
-                  fontSize: 19,
-                  fontWeight: BRAND.weightBold,
-                }}
-              >
-                مشاريعي
-              </h2>
+            جاري تحميل مشروعات الاستديو...
+          </p>
+        )}
 
-              <p
-                style={{
-                  margin: '6px 0 0',
-                  color: APP.subCol,
-                  fontSize: 13,
-                  lineHeight: 1.8,
-                }}
-              >
-                تُعرض هنا آخر مشاريع الاستديو المرتبطة بحسابك، ويمكنك فتح أي
-                مشروع لمراجعته أو استكماله.
-              </p>
-            </div>
-
-            <div
-              style={{
-                color: BRAND.muted,
-                fontSize: 13,
-              }}
-            >
-              يتم جلب المشاريع من قاعدة بيانات مداد استديو.
-            </div>
-          </div>
-        </section>
-
-        {error ? (
-          <div
-            role="alert"
+        {error && (
+          <p
             style={{
-              ...panelStyle,
-              marginBottom: BRAND.spaceSm,
-              border: '1px solid #FEB2B2',
-              backgroundColor: '#FFF5F5',
-              color: '#9B2C2C',
-              boxShadow: 'none',
               fontSize: 14,
-              lineHeight: 1.8,
+              color: '#C53030',
+              marginBottom: 10,
             }}
           >
             {error}
-          </div>
-        ) : null}
+          </p>
+        )}
 
-        {successMessage ? (
-          <div
+        {!loading && !error && projects.length === 0 && (
+          <p
             style={{
-              ...panelStyle,
-              marginBottom: BRAND.spaceSm,
-              border: '1px solid #9AE6B4',
-              backgroundColor: '#F0FFF4',
-              color: '#276749',
-              boxShadow: 'none',
               fontSize: 14,
-              lineHeight: 1.8,
+              color: APP.subCol,
             }}
           >
-            {successMessage}
-          </div>
-        ) : null}
+            لا توجد مشروعات بعد. ابدأ بإنشاء مشروع جديد من الأعلى.
+          </p>
+        )}
 
-        {loading ? (
-          <div style={panelStyle}>
-            <p
+        {!loading && !error && projects.length > 0 && (
+          <>
+            <h2
               style={{
-                margin: 0,
-                fontSize: 14,
-                color: APP.subCol,
-              }}
-            >
-              جارٍ تحميل مشروعات الاستديو...
-            </p>
-          </div>
-        ) : projects.length === 0 ? (
-          <section style={panelStyle}>
-            <h3
-              style={{
-                margin: '0 0 10px',
-                color: APP.textCol,
-                fontFamily: BRAND.fontHeading,
                 fontSize: 18,
-                fontWeight: BRAND.weightBold,
+                fontWeight: BRAND.weightSemibold,
+                color: APP.textCol,
+                marginBottom: 10,
+                fontFamily: BRAND.fontHeading,
               }}
             >
-              لا توجد مشروعات بعد
-            </h3>
+              مشاريعي الأخيرة
+            </h2>
 
-            <p
+            <div
               style={{
-                margin: 0,
-                color: APP.subCol,
-                fontSize: 14,
-                lineHeight: 1.9,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: 12,
               }}
             >
-              ابدأ بإنشاء مشروع جديد لإعداد ملخص درس أو اختبار أو أي مخرج
-              تعليمي آخر داخل الاستديو.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => router.push('/studio/projects/new')}
-              style={{ ...primaryButtonStyle, marginTop: 14 }}
-            >
-              إنشاء أول مشروع
-            </button>
-          </section>
-        ) : (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: 14,
-            }}
-          >
-            {projects.map((project) => {
-              const status = getStatusConfig(project.status)
-              const isDeleting = deletingId === project.id
-              const canDelete = project.status === 'draft'
-
-              return (
+              {projects.map((project) => (
                 <article
                   key={project.id}
                   style={{
                     borderRadius: BRAND.radiusLg,
-                    border: `1px solid ${APP.borderCol}`,
-                    backgroundColor: APP.cardBg,
-                    padding: 16,
+                    border: `1px solid #F97373`,
+                    backgroundColor: '#FFFDF9',
+                    padding: 14,
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    minHeight: 220,
+                    minHeight: 150,
                     boxShadow: APP.shadow,
                   }}
                 >
                   <div>
-                    <div
+                    <h3
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        gap: 10,
-                        marginBottom: 10,
-                        flexWrap: 'wrap',
+                        fontSize: 16,
+                        fontWeight: BRAND.weightBold,
+                        color: APP.textCol,
+                        marginBottom: 6,
                       }}
                     >
-                      <h3
-                        style={{
-                          fontSize: 17,
-                          fontWeight: BRAND.weightBold,
-                          color: APP.textCol,
-                          margin: 0,
-                          fontFamily: BRAND.fontHeading,
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {project.title || 'مشروع بدون عنوان'}
-                      </h3>
-
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          paddingInline: 10,
-                          paddingBlock: 4,
-                          borderRadius: BRAND.radiusPill,
-                          backgroundColor: status.background,
-                          color: status.color,
-                          fontSize: 12,
-                          fontWeight: BRAND.weightSemibold,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {status.label}
-                      </span>
-                    </div>
-
-                    <div
+                      {project.title || 'مشروع بدون عنوان'}
+                    </h3>
+                    <p
                       style={{
-                        display: 'grid',
-                        gap: 6,
                         fontSize: 13,
                         color: APP.subCol,
-                        lineHeight: 1.8,
+                        marginBottom: 4,
                       }}
                     >
-                      <div>
-                        <strong style={{ color: APP.textCol }}>
-                          نوع الناتج:
-                        </strong>{' '}
-                        {getOutputTypeLabel(project.output_type)}
-                      </div>
-
-                      <div>
-                        <strong style={{ color: APP.textCol }}>
-                          نوع المادة:
-                        </strong>{' '}
-                        {getSourceTypeLabel(project.source_type)}
-                      </div>
-
-                      <div>
-                        <strong style={{ color: APP.textCol }}>
-                          تاريخ الإنشاء:
-                        </strong>{' '}
-                        {formatArabicDate(project.created_at)}
-                      </div>
-                    </div>
+                      نوع المخرج: {renderOutputType(project.output_type)}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: BRAND.muted,
+                        marginBottom: 4,
+                      }}
+                    >
+                      تاريخ الإنشاء:{' '}
+                      {project.created_at
+                        ? new Date(project.created_at).toLocaleString('ar-KW')
+                        : 'غير متوفر'}
+                    </p>
+                    {renderStatusBadge(project.status)}
                   </div>
 
                   <div
@@ -669,9 +334,8 @@ export default function StudioDashboardPage() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      marginTop: 14,
+                      marginTop: 10,
                       gap: 8,
-                      flexWrap: 'wrap',
                     }}
                   >
                     <button
@@ -679,44 +343,79 @@ export default function StudioDashboardPage() {
                       onClick={() =>
                         router.push(`/studio/projects/${project.id}`)
                       }
-                      style={secondaryButtonStyle}
+                      style={{
+                        paddingInline: 14,
+                        paddingBlock: 7,
+                        borderRadius: BRAND.radiusPill,
+                        border: `1px solid ${APP.borderCol}`,
+                        cursor: 'pointer',
+                        backgroundColor: '#FFFFFF',
+                        color: APP.textCol,
+                        fontSize: 13,
+                        fontWeight: BRAND.weightSemibold,
+                      }}
                     >
                       فتح المشروع
                     </button>
 
                     <button
                       type="button"
-                      disabled={!canDelete || isDeleting}
-                      onClick={() => void handleDeleteProject(project)}
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          'هل تريد حذف هذا المشروع نهائياً؟ لا يمكن التراجع عن هذه الخطوة.'
+                        )
+                        if (!confirmed) return
+
+                        try {
+                          const res = await fetch(
+                            `/api/studio/projects/${project.id}`,
+                            {
+                              method: 'DELETE',
+                            }
+                          )
+
+                          const data = await res.json().catch(() => null)
+
+                          if (!res.ok) {
+                            alert(
+                              data?.error || 'تعذر حذف المشروع من الاستديو.'
+                            )
+                            return
+                          }
+
+                          // إزالة المشروع من القائمة في الواجهة بعد الحذف
+                          setProjects((prev) =>
+                            prev.filter((p) => p.id !== project.id)
+                          )
+                        } catch (err: any) {
+                          console.error(
+                            'Error deleting project from list:',
+                            err
+                          )
+                          alert(
+                            'حدث خطأ غير متوقع أثناء حذف المشروع من الاستديو.'
+                          )
+                        }
+                      }}
                       style={{
                         paddingInline: 14,
-                        paddingBlock: 8,
+                        paddingBlock: 7,
                         borderRadius: BRAND.radiusPill,
                         border: 'none',
-                        cursor:
-                          !canDelete || isDeleting
-                            ? 'not-allowed'
-                            : 'pointer',
-                        backgroundColor: canDelete ? '#E53E3E' : '#CBD5E0',
+                        cursor: 'pointer',
+                        backgroundColor: '#E53E3E',
                         color: '#FFFFFF',
-                        fontFamily: BRAND.fontBody,
                         fontSize: 13,
                         fontWeight: BRAND.weightSemibold,
-                        opacity: !canDelete || isDeleting ? 0.75 : 1,
                       }}
-                      title={
-                        canDelete
-                          ? 'حذف المشروع'
-                          : 'يمكن حذف المشاريع التي حالتها مسودة فقط'
-                      }
                     >
-                      {isDeleting ? 'جارٍ الحذف...' : 'حذف المشروع'}
+                      حذف المشروع
                     </button>
                   </div>
                 </article>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </main>
