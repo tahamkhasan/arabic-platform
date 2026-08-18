@@ -671,59 +671,59 @@ export default function StudioProjectDetailPage() {
       )
     )
   }
-function handleMoveQuestion(questionIndex: number, direction: 'up' | 'down') {
-  if (savingQuiz) {
-    return
+
+  function handleMoveQuestion(questionIndex: number, direction: 'up' | 'down') {
+    setDraftQuestions((currentQuestions) => {
+      const targetIndex =
+        direction === 'up' ? questionIndex - 1 : questionIndex + 1
+
+      if (targetIndex < 0 || targetIndex >= currentQuestions.length) {
+        return currentQuestions
+      }
+
+      const nextQuestions = [...currentQuestions]
+
+      ;[nextQuestions[questionIndex], nextQuestions[targetIndex]] = [
+        nextQuestions[targetIndex],
+        nextQuestions[questionIndex],
+      ]
+
+      return nextQuestions
+    })
   }
 
-  const targetIndex = direction === 'up' ? questionIndex - 1 : questionIndex + 1
+  function handleAddQuestion() {
+    const nextNumber = draftQuestions.length + 1
 
-  if (targetIndex < 0 || targetIndex >= draftQuestions.length) {
-    return
+    setDraftQuestions((currentQuestions) => [
+      ...currentQuestions,
+      {
+        id: `q-${Date.now()}-${nextNumber}`,
+        question: '',
+        options: ['', '', '', ''],
+        correctAnswerIndex: 0,
+      },
+    ])
   }
 
-  setDraftQuestions((currentQuestions) => {
-    const nextQuestions = [...currentQuestions]
-    ;[nextQuestions[questionIndex], nextQuestions[targetIndex]] = [
-      nextQuestions[targetIndex],
-      nextQuestions[questionIndex],
-    ]
-    return nextQuestions
-  })
-}
+  function handleDeleteQuestion(questionIndex: number) {
+    if (draftQuestions.length <= 4) {
+      setError('يجب أن يحتوي الاختبار على أربعة أسئلة على الأقل.')
+      return
+    }
 
-function handleAddQuestion() {
-  const nextNumber = draftQuestions.length + 1
+    const confirmed = window.confirm(
+      `هل تريد حذف السؤال رقم ${questionIndex + 1}؟`
+    )
 
-  setDraftQuestions((currentQuestions) => [
-    ...currentQuestions,
-    {
-      id: `q-${Date.now()}-${nextNumber}`,
-      question: '',
-      options: ['', '', '', ''],
-      correctAnswerIndex: 0,
-    },
-  ])
-}
+    if (!confirmed) {
+      return
+    }
 
-function handleDeleteQuestion(questionIndex: number) {
-  if (draftQuestions.length <= 4) {
-    setError('يجب أن يحتوي الاختبار على أربعة أسئلة على الأقل.')
-    return
+    setDraftQuestions((currentQuestions) =>
+      currentQuestions.filter((_, index) => index !== questionIndex)
+    )
   }
-
-  const confirmed = window.confirm(
-    `هل تريد حذف السؤال رقم ${questionIndex + 1}؟`
-  )
-
-  if (!confirmed) {
-    return
-  }
-
-  setDraftQuestions((currentQuestions) =>
-    currentQuestions.filter((_, index) => index !== questionIndex)
-  )
-}
 
   async function handleSaveQuizEdits() {
     if (!project || !quiz) {
@@ -736,15 +736,17 @@ function handleDeleteQuestion(questionIndex: number) {
       options: question.options.map((option) => option.trim()),
       correctAnswerIndex: question.correctAnswerIndex,
     }))
-if (questions.length < 4) {
-  setError('يجب أن يحتوي الاختبار على أربعة أسئلة على الأقل.')
-  return
-}
 
-if (questions.length > 30) {
-  setError('الحد الأقصى المسموح به هو 30 سؤالًا في الاختبار الواحد.')
-  return
-}
+    if (questions.length < 4) {
+      setError('يجب أن يحتوي الاختبار على أربعة أسئلة على الأقل.')
+      return
+    }
+
+    if (questions.length > 30) {
+      setError('الحد الأقصى المسموح به هو 30 سؤالًا في الاختبار الواحد.')
+      return
+    }
+
     if (
       questions.some(
         (question) =>
@@ -785,16 +787,13 @@ if (questions.length > 30) {
     setSuccessMessage(null)
 
     try {
-      const response = await fetch(
-        `/api/studio/projects/${project.id}/quiz`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ questions }),
-        }
-      )
+      const response = await fetch(`/api/studio/projects/${project.id}/quiz`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ questions }),
+      })
 
       const data = await response.json().catch(() => null)
 
@@ -1373,9 +1372,9 @@ if (questions.length > 30) {
                     lineHeight: 1.8,
                   }}
                 >
-               عدّل نص السؤال والبدائل، وحدد البديل الصحيح بالنقر عليه. يُميَّز
-               البديل الصحيح باللون الأخضر فقط، ويمكنك إضافة الأسئلة أو حذفها أو
-               إعادة ترتيبها قبل حفظ الاختبار.
+                  عدّل نص السؤال والبدائل، وحدد البديل الصحيح بالنقر عليه.
+                  يُميَّز البديل الصحيح باللون الأخضر فقط، ويمكنك إضافة الأسئلة
+                  أو حذفها أو إعادة ترتيبها قبل حفظ الاختبار.
                 </div>
 
                 {draftQuestions.map((question, questionIndex) => (
@@ -1398,82 +1397,98 @@ if (questions.length > 30) {
                         marginBottom: 10,
                       }}
                     >
-                     <div
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  }}
->
-  <strong
-    style={{
-      color: APP.textCol,
-      fontFamily: BRAND.fontHeading,
-      fontSize: 15,
-    }}
-  >
-    السؤال {questionIndex + 1}
-  </strong>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <strong
+                          style={{
+                            color: APP.textCol,
+                            fontFamily: BRAND.fontHeading,
+                            fontSize: 15,
+                          }}
+                        >
+                          السؤال {questionIndex + 1}
+                        </strong>
 
-  <button
-    type="button"
-    disabled={savingQuiz || questionIndex === 0}
-    onClick={() => handleMoveQuestion(questionIndex, 'up')}
-    aria-label={`نقل السؤال ${questionIndex + 1} إلى الأعلى`}
-    title="نقل إلى الأعلى"
-    style={{
-      paddingInline: 10,
-      paddingBlock: 6,
-      borderRadius: BRAND.radiusPill,
-      border: `1px solid ${APP.borderCol}`,
-      cursor:
-        savingQuiz || questionIndex === 0 ? 'not-allowed' : 'pointer',
-      backgroundColor: '#FFFFFF',
-      color: APP.textCol,
-      fontFamily: BRAND.fontBody,
-      fontSize: 13,
-      opacity: savingQuiz || questionIndex === 0 ? 0.5 : 1,
-    }}
-  >
-    ↑
-  </button>
+                        <button
+                          type="button"
+                          disabled={savingQuiz || questionIndex === 0}
+                          onClick={() =>
+                            handleMoveQuestion(questionIndex, 'up')
+                          }
+                          aria-label={`نقل السؤال ${questionIndex + 1} إلى الأعلى`}
+                          title="نقل إلى الأعلى"
+                          style={{
+                            minWidth: 36,
+                            minHeight: 36,
+                            paddingInline: 10,
+                            paddingBlock: 6,
+                            borderRadius: BRAND.radiusPill,
+                            border: `1px solid ${APP.borderCol}`,
+                            cursor:
+                              savingQuiz || questionIndex === 0
+                                ? 'not-allowed'
+                                : 'pointer',
+                            backgroundColor: '#FFFFFF',
+                            color: APP.textCol,
+                            fontFamily: BRAND.fontBody,
+                            fontSize: 16,
+                            fontWeight: BRAND.weightBold,
+                            opacity:
+                              savingQuiz || questionIndex === 0 ? 0.5 : 1,
+                          }}
+                        >
+                          ↑
+                        </button>
 
-  <button
-    type="button"
-    disabled={
-      savingQuiz || questionIndex === draftQuestions.length - 1
-    }
-    onClick={() => handleMoveQuestion(questionIndex, 'down')}
-    aria-label={`نقل السؤال ${questionIndex + 1} إلى الأسفل`}
-    title="نقل إلى الأسفل"
-    style={{
-      paddingInline: 10,
-      paddingBlock: 6,
-      borderRadius: BRAND.radiusPill,
-      border: `1px solid ${APP.borderCol}`,
-      cursor:
-        savingQuiz || questionIndex === draftQuestions.length - 1
-          ? 'not-allowed'
-          : 'pointer',
-      backgroundColor: '#FFFFFF',
-      color: APP.textCol,
-      fontFamily: BRAND.fontBody,
-      fontSize: 13,
-      opacity:
-        savingQuiz || questionIndex === draftQuestions.length - 1
-          ? 0.5
-          : 1,
-    }}
-  >
-    ↓
-  </button>
-</div>
+                        <button
+                          type="button"
+                          disabled={
+                            savingQuiz ||
+                            questionIndex === draftQuestions.length - 1
+                          }
+                          onClick={() =>
+                            handleMoveQuestion(questionIndex, 'down')
+                          }
+                          aria-label={`نقل السؤال ${questionIndex + 1} إلى الأسفل`}
+                          title="نقل إلى الأسفل"
+                          style={{
+                            minWidth: 36,
+                            minHeight: 36,
+                            paddingInline: 10,
+                            paddingBlock: 6,
+                            borderRadius: BRAND.radiusPill,
+                            border: `1px solid ${APP.borderCol}`,
+                            cursor:
+                              savingQuiz ||
+                              questionIndex === draftQuestions.length - 1
+                                ? 'not-allowed'
+                                : 'pointer',
+                            backgroundColor: '#FFFFFF',
+                            color: APP.textCol,
+                            fontFamily: BRAND.fontBody,
+                            fontSize: 16,
+                            fontWeight: BRAND.weightBold,
+                            opacity:
+                              savingQuiz ||
+                              questionIndex === draftQuestions.length - 1
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          ↓
+                        </button>
+                      </div>
 
-<button
-  type="button"
-  disabled={savingQuiz || draftQuestions.length <= 4}
-  onClick={() => handleDeleteQuestion(questionIndex)}
+                      <button
+                        type="button"
+                        disabled={savingQuiz || draftQuestions.length <= 4}
+                        onClick={() => handleDeleteQuestion(questionIndex)}
                         style={{
                           paddingInline: 12,
                           paddingBlock: 7,
@@ -1488,7 +1503,10 @@ if (questions.length > 30) {
                           fontFamily: BRAND.fontBody,
                           fontSize: 12,
                           fontWeight: BRAND.weightSemibold,
-                          opacity: savingQuiz || draftQuestions.length <= 4 ? 0.55 : 1,
+                          opacity:
+                            savingQuiz || draftQuestions.length <= 4
+                              ? 0.55
+                              : 1,
                         }}
                       >
                         حذف السؤال
@@ -1625,15 +1643,16 @@ if (questions.length > 30) {
                   <button
                     type="button"
                     disabled={savingQuiz}
-                   onClick={handleAddQuestion}
-                   style={{
-                   ...secondaryButtonStyle,
-                    cursor: savingQuiz ? 'not-allowed' : 'pointer',
-                    opacity: savingQuiz ? 0.7 : 1,
-                  }}
-                            >
-                           إضافة سؤال
+                    onClick={handleAddQuestion}
+                    style={{
+                      ...secondaryButtonStyle,
+                      cursor: savingQuiz ? 'not-allowed' : 'pointer',
+                      opacity: savingQuiz ? 0.7 : 1,
+                    }}
+                  >
+                    إضافة سؤال
                   </button>
+
                   <button
                     type="button"
                     disabled={savingQuiz}
@@ -1725,7 +1744,6 @@ if (questions.length > 30) {
                             >
                               {String.fromCharCode(65 + optionIndex)}.
                             </strong>
-
                             {option}
                           </div>
                         )
